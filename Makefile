@@ -34,14 +34,14 @@ dashboard:       ## Start Next.js surveillance console (http://127.0.0.1:3000)
 	@echo "Next.js surveillance dashboard running at http://127.0.0.1:3000"
 
 demo:            ## Replay sample AIS positions to Kafka
-	python3 -m streaming.producer --seed 42 --speedup 720
+	uv run --no-sync --project backend python3 -m streaming.producer --speedup 60
 
 stream:          ## Run consumer and sweeper
 	@./scripts/check_prior.sh
 	docker compose --profile stream up -d
 
 test:            ## Run pytest test suite for backend
-	pytest backend/tests/ -v
+	uv run --no-sync --project backend pytest backend/tests/ -v
 
 lint:            ## Lint Python codebase with ruff
-	ruff check backend/
+	uv run --no-sync --project backend ruff check backend/
