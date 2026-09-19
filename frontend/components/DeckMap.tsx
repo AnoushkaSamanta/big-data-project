@@ -4,7 +4,8 @@ import React, { useState, useMemo } from "react";
 import DeckGL from "@deck.gl/react";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import { GeoJsonLayer, PathLayer } from "@deck.gl/layers";
-import { Map } from "maplibre-gl";
+import Map from "react-map-gl/maplibre";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
 
@@ -134,13 +135,10 @@ export default function DeckMap({
         layers={layers}
       >
         {/* MapLibre dark basemap */}
-        {/* @ts-ignore maplibre component rendering */}
         <Map
-          // @ts-ignore
           reuseMaps
-          mapLib={import("maplibre-gl")}
+          mapLib={maplibregl}
           mapStyle={MAP_STYLE}
-          preventStyleDiffing={true}
         />
       </DeckGL>
 
