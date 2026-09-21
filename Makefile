@@ -36,9 +36,24 @@ dashboard:       ## Start Next.js surveillance console (http://127.0.0.1:3000)
 demo:            ## Replay sample AIS positions to Kafka
 	uv run --no-sync --project backend python3 -m streaming.producer --speedup 60
 
+live:            ## Stream live real-time AIS data from AISStream.io WebSocket
+	uv run --no-sync --project backend python3 -m streaming.aisstream_producer
+
 stream:          ## Run consumer and sweeper
 	@./scripts/check_prior.sh
 	docker compose --profile stream up -d
+
+geofences:       ## Seed EEZ, MPA, and Port geofences into PostGIS
+	uv run --no-sync --project backend python3 -m data_pipeline.load_geofences
+
+prior:           ## Build coverage prior baseline
+	uv run --no-sync --project backend python3 -m analysis.build_coverage_prior
+
+train:           ## Train IsolationForest trajectory anomaly model
+	uv run --no-sync --project backend python3 -m detection.train
+
+evaluate:        ## Run Precision/Recall & ablation evaluation against ground truth
+	uv run --no-sync --project backend python3 -m evaluation.evaluate
 
 test:            ## Run pytest test suite for backend
 	uv run --no-sync --project backend pytest backend/tests/ -v

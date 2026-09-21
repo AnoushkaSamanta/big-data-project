@@ -57,8 +57,8 @@ export default function AlertFeed({
                 onClick={() => onSelectMmsi(alert.mmsi)}
                 className="alert-card"
                 style={{
-                  borderColor: isSelected ? "#38bdf8" : undefined,
-                  boxShadow: isSelected ? "0 0 12px rgba(56, 189, 248, 0.25)" : undefined,
+                  borderColor: isSelected ? "var(--silver-200)" : undefined,
+                  boxShadow: isSelected ? "0 0 16px rgba(226, 232, 240, 0.22)" : undefined,
                 }}
               >
                 <div className="alert-top">
@@ -71,14 +71,14 @@ export default function AlertFeed({
                 <div className="alert-body">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span className="alert-mmsi">MMSI {alert.mmsi}</span>
-                    <span style={{ fontSize: "11px", color: "#64748b", fontFamily: "var(--font-mono)" }}>
+                    <span style={{ fontSize: "11px", color: "var(--silver-500)", fontFamily: "var(--font-mono)" }}>
                       {timeAgo > 0 ? `${timeAgo}m ago` : "just now"}
                     </span>
                   </div>
 
                   {alert.details?.zone && (
                     <div className="alert-reason">
-                      Region: <span style={{ color: "#e2e8f0" }}>{alert.details.zone}</span>
+                      Region: <span style={{ color: "var(--silver-100)" }}>{alert.details.zone}</span>
                     </div>
                   )}
                 </div>
@@ -89,7 +89,7 @@ export default function AlertFeed({
                     {alert.details.gap_s !== undefined && (
                       <div className="evidence-cell">
                         <span>Observed Gap</span>
-                        <span style={{ color: "#ef4444" }}>
+                        <span style={{ color: "var(--color-dark)" }}>
                           {(alert.details.gap_s / 3600).toFixed(1)} hrs
                         </span>
                       </div>
@@ -125,8 +125,9 @@ export default function AlertFeed({
                     justifyContent: "flex-end",
                     gap: "4px",
                     fontSize: "11px",
-                    color: "#38bdf8",
-                    marginTop: "2px",
+                    color: "var(--silver-300)",
+                    marginTop: "4px",
+                    fontWeight: 500,
                   }}
                 >
                   <span>Inspect Vessel Track</span>

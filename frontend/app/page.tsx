@@ -8,7 +8,7 @@ import AlertFeed from "@/components/AlertFeed";
 import VesselDrawer from "@/components/VesselDrawer";
 import { VesselState } from "@/app/api/vessels/route";
 import { AlertRecord } from "@/app/api/alerts/route";
-import { ShieldAlert, Layers, Bell } from "lucide-react";
+import { ShieldAlert, Layers, Bell, MapPin } from "lucide-react";
 
 export default function SurveillanceDashboard() {
   const [vessels, setVessels] = useState<VesselState[]>([]);
@@ -26,6 +26,7 @@ export default function SurveillanceDashboard() {
   const [selectedVessel, setSelectedVessel] = useState<VesselState | null>(null);
   const [vesselTrack, setVesselTrack] = useState<Array<{ lat: number; lon: number; ts: string }>>([]);
   const [showGeofences, setShowGeofences] = useState<boolean>(true);
+  const [showPlaceNames, setShowPlaceNames] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
 
@@ -142,10 +143,20 @@ export default function SurveillanceDashboard() {
           onSelectVessel={handleSelectVessel}
           vesselTrack={vesselTrack}
           showGeofences={showGeofences}
+          showPlaceNames={showPlaceNames}
         />
 
         {/* Floating map layer toggles */}
         <div className="map-floating-controls">
+          <button
+            onClick={() => setShowPlaceNames(!showPlaceNames)}
+            className={`toggle-btn ${showPlaceNames ? "active" : ""}`}
+            title="Toggle world place names, country borders, and cities"
+          >
+            <MapPin size={14} />
+            <span>PLACE NAMES: {showPlaceNames ? "ON" : "OFF"}</span>
+          </button>
+
           <button
             onClick={() => setShowGeofences(!showGeofences)}
             className={`toggle-btn ${showGeofences ? "active" : ""}`}

@@ -59,22 +59,22 @@ def normalize_sentinels(r: Dict[str, Any]) -> Dict[str, Any]:
     """
     clean = dict(r)
 
-    # SOG normalization
-    sog = clean.get("SOG") or clean.get("sog")
+    # SOG normalization (0.0 is valid speed, do not use `or` which treats 0.0 as falsy)
+    sog = clean.get("SOG") if "SOG" in clean and clean.get("SOG") is not None else clean.get("sog")
     if sog is not None and abs(float(sog) - SENTINEL_SOG) < 1e-4:
         clean["sog"] = None
     else:
         clean["sog"] = float(sog) if sog is not None else None
 
-    # COG normalization
-    cog = clean.get("COG") or clean.get("cog")
+    # COG normalization (0.0 is valid course true north)
+    cog = clean.get("COG") if "COG" in clean and clean.get("COG") is not None else clean.get("cog")
     if cog is not None and abs(float(cog) - SENTINEL_COG) < 1e-4:
         clean["cog"] = None
     else:
         clean["cog"] = float(cog) if cog is not None else None
 
-    # Heading normalization
-    heading = clean.get("Heading") or clean.get("heading")
+    # Heading normalization (0 is valid heading true north)
+    heading = clean.get("Heading") if "Heading" in clean and clean.get("Heading") is not None else clean.get("heading")
     if heading is not None and abs(float(heading) - SENTINEL_HEADING) < 1e-4:
         clean["heading"] = None
     else:

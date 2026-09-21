@@ -1,5 +1,6 @@
 # --- streaming ---
 confluent-kafka==2.3.0
+websockets>=13.0
 
 # --- batch ---
 pyspark==3.5.1

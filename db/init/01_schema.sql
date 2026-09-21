@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_detected_at ON alerts (detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_mmsi ON alerts (mmsi);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_alerts_mmsi_type_hour ON alerts (mmsi, alert_type, date_trunc('hour', detected_at));
+CREATE UNIQUE INDEX IF NOT EXISTS uq_alerts_mmsi_type_hour ON alerts (mmsi, alert_type, date_trunc('hour', detected_at AT TIME ZONE 'UTC'));
 
 -- 4. GEOFENCES: EEZ, MPA, and Port exclusion zones
 CREATE TABLE IF NOT EXISTS geofences (

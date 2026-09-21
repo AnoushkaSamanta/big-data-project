@@ -38,7 +38,7 @@ export default function HudStats({
         </div>
         <div className="hud-meta">
           <span className="hud-label">Dark Vessel Alerts</span>
-          <span className="hud-value" style={{ color: darkVessels > 0 ? "#ef4444" : undefined }}>
+          <span className="hud-value" style={{ color: darkVessels > 0 ? "var(--color-dark)" : "var(--silver-100)" }}>
             {darkVessels}
           </span>
         </div>
@@ -51,7 +51,7 @@ export default function HudStats({
         <div className="hud-meta">
           <span className="hud-label">Ingest Rate</span>
           <span className="hud-value">
-            {msgsConsumedPerS.toLocaleString()} <small style={{ fontSize: "11px", color: "#94a3b8" }}>msg/s</small>
+            {msgsConsumedPerS.toLocaleString()} <small style={{ fontSize: "11px", color: "var(--silver-400)" }}>msg/s</small>
           </span>
         </div>
       </div>
@@ -62,7 +62,7 @@ export default function HudStats({
         </div>
         <div className="hud-meta">
           <span className="hud-label">Consumer Lag</span>
-          <span className="hud-value" style={{ color: consumerLag > 5000 ? "#f59e0b" : undefined }}>
+          <span className="hud-value" style={{ color: consumerLag > 5000 ? "var(--color-stale)" : "var(--silver-100)" }}>
             {consumerLag.toLocaleString()}
           </span>
         </div>
@@ -84,7 +84,8 @@ export default function HudStats({
         </div>
         <div className="hud-meta">
           <span className="hud-label">Coverage Gate</span>
-          <span className="hud-value" style={{ color: "#38bdf8", fontSize: "15px" }}>
+          <span className="hud-value" style={{ color: "var(--silver-200)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--silver-200)", boxShadow: "0 0 8px rgba(226, 232, 240, 0.8)" }} />
             H3 RES 5 ACTIVE
           </span>
         </div>
