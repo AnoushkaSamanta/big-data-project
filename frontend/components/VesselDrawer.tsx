@@ -565,12 +565,41 @@ export default function VesselDrawer({
             LAST BROADCAST METRICS
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
-            <div>Coordinates: {vessel.lat.toFixed(5)}° N, {vessel.lon.toFixed(5)}° W</div>
+            <div>
+              Coordinates: {Math.abs(vessel.lat).toFixed(5)}° {vessel.lat >= 0 ? "N" : "S"},{" "}
+              {Math.abs(vessel.lon).toFixed(5)}° {vessel.lon >= 0 ? "E" : "W"}
+            </div>
             <div>H3 Cell ID: {vessel.cell || "85283473fffffff"}</div>
             <div>Total Ingested Messages: {vessel.msg_count.toLocaleString()}</div>
             <div>Last Observed: {new Date(vessel.last_seen).toUTCString()}</div>
           </div>
         </div>
+
+        {/* GPS Spoofing Inland Teleportation Warning if at Queen Alia Airport */}
+        {vessel.lat >= 31.65 && vessel.lat <= 31.85 && vessel.lon >= 35.9 && vessel.lon <= 36.1 && (
+          <div
+            style={{
+              background: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.6)",
+              borderRadius: "6px",
+              padding: "10px 12px",
+              display: "flex",
+              gap: "10px",
+              alignItems: "flex-start",
+              boxShadow: "0 0 16px rgba(239, 68, 68, 0.2)",
+            }}
+          >
+            <ShieldAlert size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: "2px" }} />
+            <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+              <div style={{ fontWeight: 800, color: "#f87171", letterSpacing: "0.04em", marginBottom: "3px" }}>
+                TACTICAL ALERT // GPS SPOOFING INLAND TELEPORTATION
+              </div>
+              <div style={{ color: "var(--silver-200)" }}>
+                This vessel is physically at sea in the Mediterranean, but its civilian GPS receiver was hijacked by regional electronic warfare transmitters, forcing its AIS transponder to broadcast coordinates on the runway/roads of <strong>Queen Alia International Airport (Jordan)</strong> ~155 km inland.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Trajectory Track History */}
         <div>

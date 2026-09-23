@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldAlert, Radio, Activity, RefreshCw, Radar, BookOpen } from "lucide-react";
+import { ShieldAlert, Radio, Activity, RefreshCw, Radar, BookOpen, BarChart3 } from "lucide-react";
 
 interface HeaderProps {
   onRefresh?: () => void;
@@ -49,6 +49,14 @@ export default function Header({
           >
             <Radar size={14} />
             <span>RADAR CONSOLE</span>
+          </Link>
+
+          <Link
+            href="/analytics"
+            className={`nav-link-btn ${pathname.startsWith("/analytics") ? "active" : ""}`}
+          >
+            <BarChart3 size={14} />
+            <span>ANALYTICS DASHBOARD</span>
           </Link>
 
           <Link

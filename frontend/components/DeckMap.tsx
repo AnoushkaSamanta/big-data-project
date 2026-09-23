@@ -8,7 +8,7 @@ import Map from "react-map-gl/maplibre";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
-import { Globe, Compass, Moon } from "lucide-react";
+import { Globe, Compass, Moon, ChevronDown, MapPin, Layers, Radar, ShieldAlert } from "lucide-react";
 import { computeDriftCone, DriftConeFeature } from "@/lib/drift";
 import {
   getVesselCountry,
@@ -26,8 +26,14 @@ interface DeckMapProps {
   onSelectVessel: (v: VesselState | null) => void;
   vesselTrack: Array<{ lat: number; lon: number; ts: string }>;
   showGeofences: boolean;
+  onToggleGeofences: () => void;
   showPlaceNames?: boolean;
+  onTogglePlaceNames: () => void;
   showDriftCones?: boolean;
+  onToggleDriftCones: () => void;
+  drawerOpen: boolean;
+  onToggleDrawer: () => void;
+  alertCount: number;
 }
 
 const INITIAL_VIEW_STATE = {
@@ -41,11 +47,11 @@ const INITIAL_VIEW_STATE = {
 };
 
 const REGIONS = [
-  { name: "Global World", lon: 10.0, lat: 25.0, zoom: 2.2 },
-  { name: "Pacific / US", lon: -122.42, lat: 37.8, zoom: 8 },
-  { name: "Europe / North Sea", lon: 4.5, lat: 51.5, zoom: 5.5 },
-  { name: "Asia / Singapore", lon: 103.8, lat: 1.3, zoom: 6.5 },
-  { name: "Mediterranean", lon: 15.0, lat: 36.5, zoom: 5.2 },
+  { name: "Global World", desc: "Global Oceanic Fleet", lon: 10.0, lat: 25.0, zoom: 2.2 },
+  { name: "Pacific / US", desc: "California Surveillance Corridor", lon: -122.42, lat: 37.8, zoom: 8 },
+  { name: "Europe / North Sea", desc: "Rotterdam & English Channel", lon: 4.5, lat: 51.5, zoom: 5.5 },
+  { name: "Asia / Singapore", desc: "Strait of Malacca Chokepoint", lon: 103.8, lat: 1.3, zoom: 6.5 },
+  { name: "Mediterranean", desc: "Gibraltar & Suez Gateway", lon: 15.0, lat: 36.5, zoom: 5.2 },
 ];
 
 // Basemap style generator with Esri World Boundaries and Places labels
@@ -115,13 +121,33 @@ export default function DeckMap({
   onSelectVessel,
   vesselTrack,
   showGeofences,
+  onToggleGeofences,
   showPlaceNames = true,
+  onTogglePlaceNames,
   showDriftCones = true,
+  onToggleDriftCones,
+  drawerOpen = true,
+  onToggleDrawer,
+  alertCount = 0,
 }: DeckMapProps) {
   const [hoverInfo, setHoverInfo] = useState<any>(null);
   const [activeBasemap, setActiveBasemap] = useState<"satellite" | "ocean" | "dark">("satellite");
   const [viewState, setViewState] = useState<any>(INITIAL_VIEW_STATE);
   const [activeRegion, setActiveRegion] = useState<string>("Global World");
+  const [sectorDropdownOpen, setSectorDropdownOpen] = useState<boolean>(false);
+
+  // Close sector dropdown on outside click
+  useEffect(() => {
+    if (!sectorDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest(".sector-dropdown-wrapper")) {
+        setSectorDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [sectorDropdownOpen]);
 
   // Dynamic satellite style respecting showPlaceNames toggle
   const currentMapStyle = useMemo(() => {
@@ -244,6 +270,11 @@ export default function DeckMap({
           if (d.status === "dark") return [239, 68, 68, 255]; // Crimson warning (Dark vessel)
           if (d.status === "stale") return [245, 158, 11, 220]; // Amber (delayed ping)
 
+          // GPS Spoofed Inland Target (Queen Alia Airport hotspot, Jordan)
+          if (d.lat >= 31.65 && d.lat <= 31.85 && d.lon >= 35.9 && d.lon <= 36.1) {
+            return [245, 158, 11, 240]; // Amber warning
+          }
+
           // MarineTraffic-Style Maritime Category Color-Coding
           const code = Number(d.vessel_type) || 70;
           if (code >= 80 && code <= 89) return [239, 68, 68, 210]; // Red/Crimson: Tankers
@@ -258,6 +289,9 @@ export default function DeckMap({
         getLineColor: (d: VesselState) => {
           if (selectedVessel && selectedVessel.mmsi === d.mmsi) {
             return [255, 255, 255, 255];
+          }
+          if (d.lat >= 31.65 && d.lat <= 31.85 && d.lon >= 35.9 && d.lon <= 36.1) {
+            return [239, 68, 68, 255]; // Crimson border for spoofed inland target
           }
           if (d.status === "dark") return [255, 220, 220, 255];
           return [5, 10, 20, 180];
@@ -282,98 +316,126 @@ export default function DeckMap({
 
   return (
     <div className="map-viewport" style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Top Map Toolbar: Regional Navigator & Basemap Switcher */}
-      <div
-        style={{
-          position: "absolute",
-          top: "16px",
-          right: "16px",
-          zIndex: 35,
-          display: "flex",
-          gap: "10px",
-          alignItems: "center",
-        }}
-      >
-        {/* Regional Focus Pills */}
-        <div
-          style={{
-            display: "flex",
-            gap: "4px",
-            background: "rgba(11, 13, 19, 0.9)",
-            padding: "5px",
-            borderRadius: "8px",
-            border: "1px solid var(--silver-border)",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-          }}
-        >
-          {REGIONS.map((r) => {
-            const isRegActive = activeRegion === r.name;
-            return (
-              <button
-                key={r.name}
-                onClick={() => handleRegionSelect(r)}
-                style={{
-                  padding: "5px 9px",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  borderRadius: "5px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: isRegActive ? "rgba(226, 232, 240, 0.16)" : "transparent",
-                  color: isRegActive ? "#ffffff" : "var(--silver-400)",
-                  borderBottom: isRegActive ? "2px solid #ffffff" : "2px solid transparent",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {r.name}
-              </button>
-            );
-          })}
+      {/* Unified Tactical Command Bar (HUD Ribbon) */}
+      <div className="tactical-command-bar">
+        {/* Left Cluster: Operational Sector Jump & Layer Toggles */}
+        <div className="command-bar-cluster command-bar-left">
+          {/* Sector Selector Dropdown */}
+          <div className="sector-dropdown-wrapper">
+            <button
+              type="button"
+              className={`command-bar-btn sector-trigger ${sectorDropdownOpen ? "active" : ""}`}
+              onClick={() => setSectorDropdownOpen((prev) => !prev)}
+              title="Select operational surveillance theater"
+            >
+              <Compass size={13} className="cluster-icon text-cyan" />
+              <span className="btn-label-dim">SECTOR:</span>
+              <span className="btn-label-bold">{activeRegion}</span>
+              <ChevronDown size={12} className={`dropdown-chevron ${sectorDropdownOpen ? "open" : ""}`} />
+            </button>
+
+            {sectorDropdownOpen && (
+              <div className="sector-dropdown-menu">
+                <div className="dropdown-menu-header">OPERATIONAL SURVEILLANCE SECTORS</div>
+                {REGIONS.map((r) => {
+                  const isRegActive = activeRegion === r.name;
+                  return (
+                    <button
+                      key={r.name}
+                      type="button"
+                      className={`dropdown-menu-item ${isRegActive ? "active" : ""}`}
+                      onClick={() => {
+                        handleRegionSelect(r);
+                        setSectorDropdownOpen(false);
+                      }}
+                    >
+                      <div className="menu-item-info">
+                        <span className="menu-item-name">{r.name}</span>
+                        <span className="menu-item-sub">{r.desc}</span>
+                      </div>
+                      {isRegActive && <span className="active-dot" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="command-bar-divider" />
+
+          {/* Layer Toggles Strip */}
+          <div className="layer-toggles-strip">
+            <button
+              type="button"
+              onClick={onTogglePlaceNames}
+              className={`command-bar-chip ${showPlaceNames ? "active" : ""}`}
+              title="Toggle world borders, coastlines, and place names"
+            >
+              <MapPin size={12} />
+              <span>NAMES</span>
+              <span className={`chip-indicator ${showPlaceNames ? "on" : ""}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleGeofences}
+              className={`command-bar-chip ${showGeofences ? "active" : ""}`}
+              title="Toggle EEZ maritime boundaries & Marine Protected Areas"
+            >
+              <Layers size={12} />
+              <span>GEOFENCES</span>
+              <span className={`chip-indicator ${showGeofences ? "on" : ""}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleDriftCones}
+              className={`command-bar-chip ${showDriftCones ? "active" : ""}`}
+              title="Toggle dead-reckoning search uncertainty cones for dark vessels"
+            >
+              <Radar size={12} />
+              <span>DRIFT CONES</span>
+              <span className={`chip-indicator ${showDriftCones ? "on" : ""}`} />
+            </button>
+          </div>
         </div>
 
-        {/* Basemap Switcher */}
-        <div
-          style={{
-            display: "flex",
-            gap: "4px",
-            background: "rgba(11, 13, 19, 0.9)",
-            padding: "5px",
-            borderRadius: "8px",
-            border: "1px solid var(--silver-border)",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-          }}
-        >
-          {(["satellite", "ocean", "dark"] as const).map((key) => {
-            const item = BASEMAPS[key];
-            const Icon = item.icon;
-            const isActive = activeBasemap === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setActiveBasemap(key)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "5px 10px",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  borderRadius: "5px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: isActive ? "var(--silver-gradient)" : "transparent",
-                  color: isActive ? "#07080b" : "var(--silver-400)",
-                  boxShadow: isActive ? "0 2px 8px rgba(226, 232, 240, 0.3)" : "none",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <Icon size={13} />
-                <span>{item.name}</span>
-              </button>
-            );
-          })}
+        {/* Right Cluster: Basemap Switcher & Alert Drawer Toggle */}
+        <div className="command-bar-cluster command-bar-right">
+          {/* Basemap Switcher */}
+          <div className="basemap-strip">
+            {(["satellite", "ocean", "dark"] as const).map((key) => {
+              const item = BASEMAPS[key];
+              const Icon = item.icon;
+              const isActive = activeBasemap === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveBasemap(key)}
+                  className={`command-bar-chip basemap-chip ${isActive ? "active" : ""}`}
+                  title={`Switch basemap to ${item.name}`}
+                >
+                  <Icon size={12} />
+                  <span>{item.name.replace("Earth ", "").replace("Nautical ", "").replace("Tactical ", "")}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="command-bar-divider" />
+
+          {/* Alert Feed Toggle Button */}
+          <button
+            type="button"
+            onClick={onToggleDrawer}
+            className={`command-bar-btn alert-drawer-trigger ${drawerOpen ? "active" : ""}`}
+            title="Toggle Anomaly Alert Feed sidebar"
+          >
+            <ShieldAlert size={14} color="#ef4444" />
+            <span>ALERTS</span>
+            <span className="command-badge">{alertCount}</span>
+          </button>
         </div>
       </div>
 
@@ -457,6 +519,26 @@ export default function DeckMap({
                     </div>
                   </div>
 
+                  {/* GPS Spoofing inland warning badge */}
+                  {hoverInfo.object.lat >= 31.65 && hoverInfo.object.lat <= 31.85 && hoverInfo.object.lon >= 35.9 && hoverInfo.object.lon <= 36.1 && (
+                    <div style={{
+                      background: "rgba(239, 68, 68, 0.2)",
+                      border: "1px solid rgba(239, 68, 68, 0.6)",
+                      color: "#fca5a5",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      marginBottom: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}>
+                      <ShieldAlert size={12} color="#ef4444" />
+                      <span>⚠️ GPS SPOOFED // INLAND AMMAN AIRPORT</span>
+                    </div>
+                  )}
+
                   {/* Motion Pill */}
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
                     <span className={`motion-beacon ${motion.statusClass}`} />
@@ -509,6 +591,10 @@ export default function DeckMap({
         <div className="legend-item">
           <div className="legend-swatch" style={{ background: "#a855f7" }} />
           <span>High-Speed Craft (HSC)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-swatch" style={{ background: "#f59e0b", border: "1px solid #ef4444", boxShadow: "0 0 6px #f59e0b" }} />
+          <span>GPS Spoofed Inland Target</span>
         </div>
         <div className="legend-item">
           <div className="legend-swatch dark" style={{ boxShadow: "0 0 8px #ef4444" }} />

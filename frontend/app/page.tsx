@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import HudStats from "@/components/HudStats";
 import DeckMap from "@/components/DeckMap";
@@ -8,9 +9,12 @@ import AlertFeed from "@/components/AlertFeed";
 import VesselDrawer from "@/components/VesselDrawer";
 import { VesselState } from "@/app/api/vessels/route";
 import { AlertRecord } from "@/app/api/alerts/route";
-import { ShieldAlert, Layers, Bell, MapPin, Radar } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 
-export default function SurveillanceDashboard() {
+function SurveillanceDashboardContent() {
+  const searchParams = useSearchParams();
+  const mmsiParam = searchParams.get("mmsi");
+
   const [vessels, setVessels] = useState<VesselState[]>([]);
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [geofences, setGeofences] = useState<any>(null);
@@ -114,6 +118,16 @@ export default function SurveillanceDashboard() {
     [vessels, alerts, handleSelectVessel]
   );
 
+  // Auto-focus on vessel if passed via ?mmsi= query parameter
+  useEffect(() => {
+    if (mmsiParam && (vessels.length > 0 || alerts.length > 0)) {
+      const targetMmsi = parseInt(mmsiParam, 10);
+      if (!isNaN(targetMmsi)) {
+        handleSelectAlertMmsi(targetMmsi);
+      }
+    }
+  }, [mmsiParam, vessels, alerts, handleSelectAlertMmsi]);
+
   return (
     <div className="surveillance-container">
       {/* Top Tactical Header */}
@@ -136,7 +150,7 @@ export default function SurveillanceDashboard() {
 
       {/* Main Workspace */}
       <div className="workspace">
-        {/* Map Viewport */}
+        {/* Map Viewport with Unified Tactical Command Bar */}
         <DeckMap
           vessels={vessels}
           geofences={geofences}
@@ -144,46 +158,15 @@ export default function SurveillanceDashboard() {
           onSelectVessel={handleSelectVessel}
           vesselTrack={vesselTrack}
           showGeofences={showGeofences}
+          onToggleGeofences={() => setShowGeofences((prev) => !prev)}
           showPlaceNames={showPlaceNames}
+          onTogglePlaceNames={() => setShowPlaceNames((prev) => !prev)}
           showDriftCones={showDriftCones}
+          onToggleDriftCones={() => setShowDriftCones((prev) => !prev)}
+          drawerOpen={drawerOpen}
+          onToggleDrawer={() => setDrawerOpen((prev) => !prev)}
+          alertCount={alerts.length}
         />
-
-        {/* Floating map layer toggles */}
-        <div className="map-floating-controls">
-          <button
-            onClick={() => setShowPlaceNames(!showPlaceNames)}
-            className={`toggle-btn ${showPlaceNames ? "active" : ""}`}
-            title="Toggle world place names, country borders, and cities"
-          >
-            <MapPin size={14} />
-            <span>PLACE NAMES: {showPlaceNames ? "ON" : "OFF"}</span>
-          </button>
-
-          <button
-            onClick={() => setShowGeofences(!showGeofences)}
-            className={`toggle-btn ${showGeofences ? "active" : ""}`}
-          >
-            <Layers size={14} />
-            <span>EEZ / MPA GEOFENCES</span>
-          </button>
-
-          <button
-            onClick={() => setShowDriftCones(!showDriftCones)}
-            className={`toggle-btn ${showDriftCones ? "active" : ""}`}
-            title="Toggle tactical dead-reckoning search uncertainty cones for dark vessels"
-          >
-            <Radar size={14} />
-            <span>DRIFT CONES: {showDriftCones ? "ON" : "OFF"}</span>
-          </button>
-
-          <button
-            onClick={() => setDrawerOpen(!drawerOpen)}
-            className={`toggle-btn ${drawerOpen ? "active" : ""}`}
-          >
-            <Bell size={14} />
-            <span>ALERTS FEED ({alerts.length})</span>
-          </button>
-        </div>
 
         {/* Side Alert / Feed Drawer */}
         {drawerOpen && (
@@ -217,3 +200,12 @@ export default function SurveillanceDashboard() {
     </div>
   );
 }
+
+export default function SurveillanceDashboard() {
+  return (
+    <Suspense fallback={<div className="surveillance-container" />}>
+      <SurveillanceDashboardContent />
+    </Suspense>
+  );
+}
+
