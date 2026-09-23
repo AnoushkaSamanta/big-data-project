@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { AlertRecord } from "@/app/api/alerts/route";
 import { ShieldCheck, ChevronRight, Search, X } from "lucide-react";
+import { getVesselCountry } from "@/lib/mmsi";
 
 interface AlertFeedProps {
   alerts: AlertRecord[];
@@ -34,10 +35,20 @@ export default function AlertFeed({
       if (filterSeverity !== "all" && a.severity !== filterSeverity) return false;
       if (filterType !== "all" && a.alert_type !== filterType) return false;
       if (searchMmsi.trim()) {
-        const query = searchMmsi.trim();
+        const query = searchMmsi.trim().toLowerCase();
         const mmsiStr = String(a.mmsi);
+        const nameStr = (a.vessel_name || "").toLowerCase();
+        const country = getVesselCountry(a.mmsi);
+        const countryStr = country.country.toLowerCase();
         const partnerStr = a.details?.partner_mmsi ? String(a.details.partner_mmsi) : "";
-        if (!mmsiStr.includes(query) && !partnerStr.includes(query)) return false;
+        if (
+          !mmsiStr.includes(query) &&
+          !nameStr.includes(query) &&
+          !countryStr.includes(query) &&
+          !partnerStr.includes(query)
+        ) {
+          return false;
+        }
       }
       return true;
     });
@@ -137,6 +148,24 @@ export default function AlertFeed({
             const timeAgo = Math.round(
               (Date.now() - new Date(alert.detected_at).getTime()) / 60000
             );
+            const country = getVesselCountry(alert.mmsi);
+            const hasEvidence = Boolean(
+              alert.details &&
+                (alert.details.implied_speed_knots !== undefined ||
+                  alert.details.speed_ceiling_knots !== undefined ||
+                  alert.details.dist_km !== undefined ||
+                  alert.details.jump_dist_km !== undefined ||
+                  alert.details.pattern ||
+                  alert.details.gap_s !== undefined ||
+                  alert.details.p99_gap_s !== undefined ||
+                  alert.details.distance_m !== undefined ||
+                  alert.details.distance_km !== undefined ||
+                  alert.details.loiter_hours !== undefined ||
+                  alert.details.avg_speed_knots !== undefined ||
+                  alert.details.reconstruction_error !== undefined ||
+                  alert.details.coverage_n !== undefined ||
+                  alert.details.transceiver_class)
+            );
 
             return (
               <div
@@ -156,30 +185,85 @@ export default function AlertFeed({
                 </div>
 
                 <div className="alert-body">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="alert-mmsi">MMSI {alert.mmsi}</span>
-                    <span style={{ fontSize: "11px", color: "var(--silver-500)", fontFamily: "var(--font-mono)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "15px", lineHeight: 1 }} title={`${country.country} (${country.code})`}>
+                          {country.flag}
+                        </span>
+                        <span className="alert-mmsi" style={{ fontWeight: 700 }}>
+                          {alert.vessel_name || `MMSI ${alert.mmsi}`}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--silver-400)", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                        {country.country} • MMSI {alert.mmsi}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--silver-500)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
                       {timeAgo > 0 ? `${timeAgo}m ago` : "just now"}
                     </span>
                   </div>
 
                   {alert.details?.zone && (
-                    <div className="alert-reason">
+                    <div className="alert-reason" style={{ marginTop: "4px" }}>
                       Region: <span style={{ color: "var(--silver-100)" }}>{alert.details.zone}</span>
                     </div>
                   )}
 
                   {alert.details?.partner_mmsi && (
-                    <div className="alert-reason">
+                    <div className="alert-reason" style={{ marginTop: "4px" }}>
                       Encounter Partner: <span style={{ color: "var(--color-stale)", fontWeight: 700 }}>MMSI {alert.details.partner_mmsi}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Evidence audit card */}
-                {alert.details && (
+                {hasEvidence && (
                   <div className="evidence-grid">
-                    {alert.details.gap_s !== undefined && (
+                    {/* Spoofing telemetry */}
+                    {alert.details?.implied_speed_knots !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Implied Speed</span>
+                        <span style={{ color: "var(--color-dark)", fontWeight: 700 }}>
+                          {Number(alert.details.implied_speed_knots).toFixed(1)} kn
+                        </span>
+                      </div>
+                    )}
+
+                    {alert.details?.speed_ceiling_knots !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Speed Ceiling</span>
+                        <span>{Number(alert.details.speed_ceiling_knots).toFixed(0)} kn</span>
+                      </div>
+                    )}
+
+                    {alert.details?.dist_km !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Displacement</span>
+                        <span>{Number(alert.details.dist_km).toFixed(1)} km</span>
+                      </div>
+                    )}
+
+                    {alert.details?.jump_dist_km !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Jump Distance</span>
+                        <span style={{ color: "var(--color-stale)" }}>
+                          {Number(alert.details.jump_dist_km).toFixed(1)} km
+                        </span>
+                      </div>
+                    )}
+
+                    {alert.details?.pattern && (
+                      <div className="evidence-cell">
+                        <span>Pattern</span>
+                        <span style={{ textTransform: "capitalize", color: "var(--silver-200)" }}>
+                          {String(alert.details.pattern).replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Dark Vessel gap */}
+                    {alert.details?.gap_s !== undefined && (
                       <div className="evidence-cell">
                         <span>Observed Gap</span>
                         <span style={{ color: "var(--color-dark)" }}>
@@ -188,28 +272,59 @@ export default function AlertFeed({
                       </div>
                     )}
 
-                    {alert.details.p99_gap_s !== undefined && (
+                    {alert.details?.p99_gap_s !== undefined && (
                       <div className="evidence-cell">
                         <span>Expected p99</span>
                         <span>{(alert.details.p99_gap_s / 60).toFixed(0)} min</span>
                       </div>
                     )}
 
-                    {alert.details.distance_m !== undefined && (
+                    {/* Rendezvous / STS */}
+                    {alert.details?.distance_m !== undefined && (
                       <div className="evidence-cell">
                         <span>STS Distance</span>
                         <span style={{ color: "var(--color-stale)" }}>{alert.details.distance_m} m</span>
                       </div>
                     )}
 
-                    {alert.details.coverage_n !== undefined && (
+                    {/* MMSI Collision */}
+                    {alert.details?.distance_km !== undefined && alert.details?.dist_km === undefined && (
+                      <div className="evidence-cell">
+                        <span>Separation</span>
+                        <span style={{ color: "var(--color-dark)" }}>
+                          {Number(alert.details.distance_km).toFixed(1)} km
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Loitering */}
+                    {alert.details?.loiter_hours !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Loiter Time</span>
+                        <span style={{ color: "var(--color-stale)" }}>
+                          {Number(alert.details.loiter_hours).toFixed(1)} hrs
+                        </span>
+                      </div>
+                    )}
+
+                    {/* ML Anomaly */}
+                    {alert.details?.reconstruction_error !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Recon Error</span>
+                        <span style={{ color: "var(--color-dark)" }}>
+                          {Number(alert.details.reconstruction_error).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    {alert.details?.coverage_n !== undefined && (
                       <div className="evidence-cell">
                         <span>Coverage Obs</span>
                         <span>{alert.details.coverage_n.toLocaleString()}</span>
                       </div>
                     )}
 
-                    {alert.details.transceiver_class && (
+                    {alert.details?.transceiver_class && (
                       <div className="evidence-cell">
                         <span>Class</span>
                         <span>Class {alert.details.transceiver_class}</span>

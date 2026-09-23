@@ -2,8 +2,9 @@
 
 import React, { useMemo } from "react";
 import { VesselState } from "@/app/api/vessels/route";
-import { X, Navigation, ShieldAlert, Download, Radar } from "lucide-react";
+import { X, Navigation, ShieldAlert, Download, Radar, Camera, ExternalLink, Ship, Globe } from "lucide-react";
 import { computeDriftCone } from "@/lib/drift";
+import { getVesselCountry, getVesselTypeName, getMarineTrafficUrl, getVesselFinderUrl } from "@/lib/mmsi";
 
 interface VesselDrawerProps {
   vessel: VesselState | null;
@@ -17,6 +18,9 @@ export default function VesselDrawer({
   trackPoints,
 }: VesselDrawerProps) {
   if (!vessel) return null;
+
+  const country = getVesselCountry(vessel.mmsi);
+  const vesselTypeName = getVesselTypeName(vessel.vessel_type);
 
   // Compute tactical dead-reckoning search zone if vessel is dark
   const driftZone = useMemo(() => {
@@ -40,8 +44,12 @@ export default function VesselDrawer({
         generated_at: new Date().toISOString(),
         vessel: {
           mmsi: vessel.mmsi,
+          vessel_name: vessel.vessel_name || null,
+          country: country.country,
+          flag: country.flag,
           status: vessel.status,
           vessel_type: vessel.vessel_type,
+          vessel_type_name: vesselTypeName,
           transceiver_class: vessel.transceiver_class,
           msg_count: vessel.msg_count,
           last_observed: vessel.last_seen,
@@ -60,7 +68,7 @@ export default function VesselDrawer({
             coordinates: [vessel.lon, vessel.lat],
           },
           properties: {
-            name: `Last Known Position - MMSI ${vessel.mmsi}`,
+            name: `Last Known Position - ${vessel.vessel_name || `MMSI ${vessel.mmsi}`}`,
             timestamp: vessel.last_seen,
             status: vessel.status,
             sog_knots: vessel.sog,
@@ -104,9 +112,18 @@ export default function VesselDrawer({
   return (
     <div className="side-drawer" style={{ position: "absolute", right: 0, top: 0, bottom: 0, zIndex: 40 }}>
       <div className="drawer-header">
-        <div className="drawer-title">
-          <Navigation size={18} color="var(--silver-200)" />
-          <span>VESSEL DRILLDOWN // {vessel.mmsi}</span>
+        <div className="drawer-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "20px" }} title={`${country.country} (${country.code})`}>
+            {country.flag}
+          </span>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontWeight: 700, letterSpacing: "0.02em", color: "var(--silver-100)" }}>
+              {vessel.vessel_name || `VESSEL ${vessel.mmsi}`}
+            </span>
+            <span style={{ fontSize: "11px", color: "var(--silver-400)", fontFamily: "var(--font-mono)" }}>
+              {country.country} ({country.code}) • MMSI {vessel.mmsi}
+            </span>
+          </div>
         </div>
         <button
           onClick={onClose}
@@ -262,11 +279,95 @@ export default function VesselDrawer({
 
           <div className="alert-card" style={{ padding: "10px" }}>
             <div style={{ fontSize: "10px", color: "var(--silver-500)", textTransform: "uppercase" }}>
-              Vessel Type Code
+              Vessel Type
             </div>
-            <div style={{ fontSize: "18px", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--silver-100)" }}>
-              {vessel.vessel_type || "Unknown"}
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 700,
+                fontFamily: "var(--font-mono)",
+                color: "var(--silver-100)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                marginTop: "2px",
+              }}
+              title={vesselTypeName}
+            >
+              {vesselTypeName}
             </div>
+            <div style={{ fontSize: "10px", color: "var(--silver-400)", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+              {vessel.vessel_type ? `AIS Code: ${vessel.vessel_type}` : "Standard AIS"}
+            </div>
+          </div>
+        </div>
+
+        {/* Vessel Registry & Photography Section */}
+        <div className="alert-card" style={{ padding: "12px", border: "1px solid var(--silver-border-subtle)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--silver-200)", display: "flex", alignItems: "center", gap: "6px" }}>
+              <Camera size={14} color="var(--color-active)" />
+              <span>VESSEL REGISTRY & PHOTOGRAPHY</span>
+            </div>
+            <span style={{ fontSize: "10px", color: "var(--silver-400)", fontFamily: "var(--font-mono)" }}>
+              {country.flag} {country.code}
+            </span>
+          </div>
+
+          <div style={{ fontSize: "11px", color: "var(--silver-400)", marginBottom: "10px", lineHeight: "1.4" }}>
+            Real-time AIS broadcasts stream telemetry only (no media payloads). Direct links to ship photography galleries and verified global registry:
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <a
+              href={getMarineTrafficUrl(vessel.mmsi)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 10px",
+                background: "rgba(14, 165, 233, 0.08)",
+                border: "1px solid rgba(14, 165, 233, 0.25)",
+                borderRadius: "4px",
+                color: "var(--silver-100)",
+                textDecoration: "none",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Ship size={16} color="#0ea5e9" />
+                <span>MarineTraffic Photos & Registry</span>
+              </div>
+              <ExternalLink size={13} color="var(--silver-400)" />
+            </a>
+
+            <a
+              href={getVesselFinderUrl(vessel.mmsi)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 10px",
+                background: "rgba(59, 130, 246, 0.08)",
+                border: "1px solid rgba(59, 130, 246, 0.25)",
+                borderRadius: "4px",
+                color: "var(--silver-100)",
+                textDecoration: "none",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Globe size={16} color="#3b82f6" />
+                <span>VesselFinder Ship Gallery</span>
+              </div>
+              <ExternalLink size={13} color="var(--silver-400)" />
+            </a>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 -- 1. COLD STORE: vessel_positions (range-partitioned by month)
 CREATE TABLE IF NOT EXISTS vessel_positions (
     mmsi BIGINT NOT NULL,
+    vessel_name TEXT,
     ts TIMESTAMPTZ NOT NULL,
     geom GEOMETRY(Point, 4326) NOT NULL,
     sog REAL,
@@ -33,6 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_vessel_positions_geom ON vessel_positions USING G
 -- 2. HOT STORE: vessel_latest_state (upserted live, queried by dashboard and sweeper)
 CREATE TABLE IF NOT EXISTS vessel_latest_state (
     mmsi BIGINT PRIMARY KEY,
+    vessel_name TEXT,
     last_seen TIMESTAMPTZ NOT NULL,
     last_geom GEOMETRY(Point, 4326) NOT NULL,
     last_lat DOUBLE PRECISION,

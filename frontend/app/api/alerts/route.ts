@@ -4,6 +4,7 @@ import pool from "@/lib/db";
 export interface AlertRecord {
   id: number;
   mmsi: number;
+  vessel_name?: string | null;
   alert_type: string;
   score: number;
   severity: "low" | "medium" | "high";
@@ -20,11 +21,20 @@ export interface AlertRecord {
     zone_type?: string;
     transceiver_class?: string;
     implied_speed_knots?: number;
+    speed_ceiling_knots?: number;
+    dist_km?: number;
+    jump_dist_km?: number;
+    pattern?: string;
     partner_mmsi?: number;
     distance_m?: number;
+    distance_km?: number;
     sog_1_knots?: number;
     sog_2_knots?: number;
     reason?: string;
+    loiter_hours?: number;
+    avg_speed_knots?: number;
+    reconstruction_error?: number;
+    threshold?: number;
     [key: string]: any;
   } | null;
 }
@@ -104,26 +114,37 @@ export async function GET(req: NextRequest) {
 
   try {
     let query = `
-      SELECT id, mmsi, alert_type, score, severity, detected_at, last_lat, last_lon, details
-      FROM alerts
+      SELECT 
+        a.id, 
+        a.mmsi, 
+        a.alert_type, 
+        a.score, 
+        a.severity, 
+        a.detected_at, 
+        a.last_lat, 
+        a.last_lon, 
+        a.details,
+        v.vessel_name
+      FROM alerts a
+      LEFT JOIN vessel_latest_state v ON a.mmsi = v.mmsi
     `;
     const conditions: string[] = [];
     const values: any[] = [];
 
     if (severity) {
       values.push(severity);
-      conditions.push(`severity = $${values.length}`);
+      conditions.push(`a.severity = $${values.length}`);
     }
     if (alertType) {
       values.push(alertType);
-      conditions.push(`alert_type = $${values.length}`);
+      conditions.push(`a.alert_type = $${values.length}`);
     }
 
     if (conditions.length > 0) {
       query += ` WHERE ` + conditions.join(" AND ");
     }
 
-    query += ` ORDER BY detected_at DESC LIMIT 200;`;
+    query += ` ORDER BY a.detected_at DESC LIMIT 200;`;
 
     const res = await pool.query(query, values);
 

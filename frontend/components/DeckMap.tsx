@@ -10,6 +10,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
 import { Globe, Compass, Moon } from "lucide-react";
 import { computeDriftCone, DriftConeFeature } from "@/lib/drift";
+import { getVesselCountry, getVesselTypeName } from "@/lib/mmsi";
 
 interface DeckMapProps {
   vessels: VesselState[];
@@ -405,18 +406,28 @@ export default function DeckMap({
               <div>Last Track: {hoverInfo.object.properties.sog_knots} kn @ {hoverInfo.object.properties.cog_degrees}°</div>
             </div>
           ) : (
-            <div>
-              <div style={{ fontWeight: 700, color: "var(--silver-200)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>MMSI: {hoverInfo.object.mmsi}</span>
-              </div>
-              <div>Status: <span style={{ textTransform: "uppercase", fontWeight: 600 }}>{hoverInfo.object.status}</span></div>
-              <div>Speed: {hoverInfo.object.sog !== null ? `${hoverInfo.object.sog} kn` : "N/A"}</div>
-              <div>Heading: {hoverInfo.object.heading !== null ? `${hoverInfo.object.heading}°` : "N/A"}</div>
-              <div>Class: {hoverInfo.object.transceiver_class || "A"}</div>
-              <div style={{ fontSize: "10px", color: "var(--silver-400)", marginTop: "4px" }}>
-                Lat: {Number(hoverInfo.object.lat).toFixed(4)}, Lon: {Number(hoverInfo.object.lon).toFixed(4)}
-              </div>
-            </div>
+            (() => {
+              const country = getVesselCountry(hoverInfo.object.mmsi);
+              const vTypeName = getVesselTypeName(hoverInfo.object.vessel_type);
+              return (
+                <div>
+                  <div style={{ fontWeight: 700, color: "var(--silver-200)", marginBottom: "3px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "14px" }}>{country.flag}</span>
+                    <span>{hoverInfo.object.vessel_name || `MMSI: ${hoverInfo.object.mmsi}`}</span>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--silver-400)", marginBottom: "4px" }}>
+                    {country.country} • {vTypeName}
+                  </div>
+                  <div>Status: <span style={{ textTransform: "uppercase", fontWeight: 600 }}>{hoverInfo.object.status}</span></div>
+                  <div>Speed: {hoverInfo.object.sog !== null && hoverInfo.object.sog !== undefined ? `${Number(hoverInfo.object.sog).toFixed(1)} kn` : "N/A"}</div>
+                  <div>Heading: {hoverInfo.object.heading !== null && hoverInfo.object.heading !== undefined ? `${Number(hoverInfo.object.heading).toFixed(1)}°` : "N/A"}</div>
+                  <div>Class: {hoverInfo.object.transceiver_class || "A"}</div>
+                  <div style={{ fontSize: "10px", color: "var(--silver-500)", marginTop: "4px" }}>
+                    Lat: {Number(hoverInfo.object.lat).toFixed(4)}, Lon: {Number(hoverInfo.object.lon).toFixed(4)}
+                  </div>
+                </div>
+              );
+            })()
           )}
         </div>
       )}

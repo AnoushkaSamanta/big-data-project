@@ -62,6 +62,7 @@ def flush_batch_to_postgres(
         pos_values = [
             (
                 r["MMSI"],
+                r.get("VesselName") or r.get("vessel_name"),
                 r["BaseDateTime"],
                 r["LON"],  # ST_MakePoint(LON, LAT)
                 r["LAT"],
@@ -77,7 +78,7 @@ def flush_batch_to_postgres(
 
         sql_insert_positions = """
         INSERT INTO vessel_positions (
-            mmsi, ts, geom, sog, cog, heading, vessel_type, transceiver_class, cell
+            mmsi, vessel_name, ts, geom, sog, cog, heading, vessel_type, transceiver_class, cell
         )
         VALUES %s
         ON CONFLICT (mmsi, ts) DO NOTHING;
@@ -87,7 +88,7 @@ def flush_batch_to_postgres(
             cursor,
             sql_insert_positions,
             pos_values,
-            template="(%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s)",
+            template="(%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s)",
             page_size=1000,
         )
 
@@ -99,6 +100,7 @@ def flush_batch_to_postgres(
             latest_values.append(
                 (
                     v_state.mmsi,
+                    v_state.vessel_name,
                     v_state.last_seen,
                     v_state.last_lon,
                     v_state.last_lat,
@@ -117,12 +119,13 @@ def flush_batch_to_postgres(
 
         sql_upsert_latest = """
         INSERT INTO vessel_latest_state (
-            mmsi, last_seen, last_geom, last_lat, last_lon,
+            mmsi, vessel_name, last_seen, last_geom, last_lat, last_lon,
             last_sog, last_cog, last_heading, vessel_type, transceiver_class,
             last_cell, msg_count, status
         )
         VALUES %s
         ON CONFLICT (mmsi) DO UPDATE SET
+            vessel_name = COALESCE(EXCLUDED.vessel_name, vessel_latest_state.vessel_name),
             last_seen = EXCLUDED.last_seen,
             last_geom = EXCLUDED.last_geom,
             last_lat = EXCLUDED.last_lat,
@@ -140,7 +143,7 @@ def flush_batch_to_postgres(
             cursor,
             sql_upsert_latest,
             latest_values,
-            template="(%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            template="(%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             page_size=500,
         )
 

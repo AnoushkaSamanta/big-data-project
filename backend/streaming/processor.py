@@ -23,6 +23,7 @@ class VesselState:
     last_cog: float | None = None
     last_heading: float | None = None
     vessel_type: int | None = None
+    vessel_name: str | None = None
     transceiver_class: str | None = "A"
     last_cell: str | None = None
     msg_count: int = 1
@@ -194,6 +195,7 @@ def process_batch(
         cog = r.get("cog") if "cog" in r and r.get("cog") is not None else r.get("COG")
         heading = r.get("heading") if "heading" in r and r.get("heading") is not None else r.get("Heading")
         vessel_type = r.get("VesselType")
+        vessel_name = r.get("VesselName") or r.get("vessel_name")
         t_class = r.get("TransceiverClass") or "A"
 
         curr_state = state_table.get(mmsi)
@@ -221,6 +223,7 @@ def process_batch(
                 last_cog=cog,
                 last_heading=heading,
                 vessel_type=vessel_type,
+                vessel_name=vessel_name,
                 transceiver_class=t_class,
                 last_cell=cell,
                 msg_count=1,
@@ -237,6 +240,7 @@ def process_batch(
                 curr_state.last_cog = cog if cog is not None else curr_state.last_cog
                 curr_state.last_heading = heading if heading is not None else curr_state.last_heading
                 curr_state.vessel_type = vessel_type or curr_state.vessel_type
+                curr_state.vessel_name = vessel_name or curr_state.vessel_name
                 curr_state.transceiver_class = t_class or curr_state.transceiver_class
                 curr_state.last_cell = cell or curr_state.last_cell
                 curr_state.msg_count += 1

@@ -3,6 +3,7 @@ import pool from "@/lib/db";
 
 export interface VesselState {
   mmsi: number;
+  vessel_name?: string | null;
   last_seen: string;
   lat: number;
   lon: number;
@@ -95,6 +96,7 @@ export async function GET() {
     const res = await pool.query(`
       SELECT 
         mmsi,
+        vessel_name,
         last_seen,
         last_lat as lat,
         last_lon as lon,
