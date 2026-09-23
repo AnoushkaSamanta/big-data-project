@@ -12,13 +12,12 @@ Persists snapshots into the 'pipeline_metrics' table for live Next.js HUD consum
 """
 
 import argparse
-from datetime import datetime, timezone
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
-from confluent_kafka.admin import AdminClient
+
 import psycopg2
+from confluent_kafka.admin import AdminClient
 from psycopg2.extras import RealDictCursor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -37,7 +36,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def collect_vessel_counts(cur) -> Dict[str, int]:
+def collect_vessel_counts(cur) -> dict[str, int]:
     """Query current active, stale, and dark vessel counts from hot table."""
     cur.execute(
         """
@@ -63,7 +62,7 @@ def collect_consumer_lag(admin_client: AdminClient, group_id: str) -> int:
         future = admin_client.list_consumer_group_offsets([group_id])
         group_offsets = future[group_id].result()
         total_lag = 0
-        for tp, offset_info in group_offsets.items():
+        for offset_info in group_offsets.values():
             if offset_info.offset > 0:
                 total_lag += 0  # relative lag
         return max(0, total_lag)
@@ -89,7 +88,7 @@ def collect_e2e_latency(cur) -> float:
     return float(row["p95_latency"]) if row and row["p95_latency"] is not None else 0.85
 
 
-def record_metrics_snapshot(conn, admin_client: Optional[AdminClient], group_id: str):
+def record_metrics_snapshot(conn, admin_client: AdminClient | None, group_id: str):
     """Collect and persist one telemetry snapshot."""
     cur = conn.cursor(cursor_factory=RealDictCursor)
 

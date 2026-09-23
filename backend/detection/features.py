@@ -6,11 +6,9 @@ Handles circular statistics (course over ground), trajectory tortuosity, speed d
 and reporting regularity.
 """
 
-from datetime import datetime
-import math
-from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
+
 from detection.rules import haversine_km
 
 # Minimum pings required in a 1-hour window to compute reliable features
@@ -40,7 +38,7 @@ def circular_std_degrees(angles_deg: np.ndarray) -> float:
     return float(np.degrees(circ_std_rad))
 
 
-def compute_trajectory_features(df_window: pd.DataFrame) -> Optional[Dict[str, float]]:
+def compute_trajectory_features(df_window: pd.DataFrame) -> dict[str, float] | None:
     """
     Compute feature vector from a DataFrame of pings for a single MMSI in a 1-hour window.
 

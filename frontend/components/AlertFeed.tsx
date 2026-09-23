@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { AlertRecord } from "@/app/api/alerts/route";
-import { AlertTriangle, ShieldCheck, Radio, ChevronRight } from "lucide-react";
+import { ShieldCheck, ChevronRight, Search, X } from "lucide-react";
 
 interface AlertFeedProps {
   alerts: AlertRecord[];
@@ -10,20 +10,107 @@ interface AlertFeedProps {
   selectedMmsi: number | null;
 }
 
+const ANOMALY_TYPES = [
+  { id: "all", label: "ALL" },
+  { id: "dark_vessel", label: "DARK" },
+  { id: "rendezvous_sts", label: "RENDEZVOUS" },
+  { id: "spoof", label: "SPOOF" },
+  { id: "loiter", label: "LOITER" },
+  { id: "mmsi_collision", label: "COLLISION" },
+  { id: "ml_anomaly", label: "ML" },
+];
+
 export default function AlertFeed({
   alerts,
   onSelectMmsi,
   selectedMmsi,
 }: AlertFeedProps) {
   const [filterSeverity, setFilterSeverity] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [searchMmsi, setSearchMmsi] = useState<string>("");
 
-  const filtered = alerts.filter((a) => {
-    if (filterSeverity !== "all" && a.severity !== filterSeverity) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return alerts.filter((a) => {
+      if (filterSeverity !== "all" && a.severity !== filterSeverity) return false;
+      if (filterType !== "all" && a.alert_type !== filterType) return false;
+      if (searchMmsi.trim()) {
+        const query = searchMmsi.trim();
+        const mmsiStr = String(a.mmsi);
+        const partnerStr = a.details?.partner_mmsi ? String(a.details.partner_mmsi) : "";
+        if (!mmsiStr.includes(query) && !partnerStr.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [alerts, filterSeverity, filterType, searchMmsi]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Quick Search Input */}
+      <div style={{ position: "relative", marginBottom: "8px" }}>
+        <input
+          type="text"
+          value={searchMmsi}
+          onChange={(e) => setSearchMmsi(e.target.value)}
+          placeholder="Filter by MMSI..."
+          style={{
+            width: "100%",
+            background: "rgba(10, 15, 26, 0.8)",
+            border: "1px solid var(--silver-border-subtle)",
+            borderRadius: "4px",
+            padding: "6px 28px 6px 26px",
+            fontSize: "11px",
+            color: "var(--silver-100)",
+            fontFamily: "var(--font-mono)",
+            outline: "none",
+          }}
+        />
+        <Search
+          size={12}
+          color="var(--silver-400)"
+          style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)" }}
+        />
+        {searchMmsi && (
+          <button
+            onClick={() => setSearchMmsi("")}
+            style={{
+              position: "absolute",
+              right: "6px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--silver-400)",
+              padding: "2px",
+            }}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {/* Anomaly Type Filter Pills (Horizontal scrollable) */}
+      <div
+        style={{
+          display: "flex",
+          gap: "4px",
+          marginBottom: "8px",
+          overflowX: "auto",
+          paddingBottom: "2px",
+        }}
+      >
+        {ANOMALY_TYPES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setFilterType(t.id)}
+            className={`tab-btn ${filterType === t.id ? "active" : ""}`}
+            style={{ fontSize: "10px", padding: "3px 7px", whiteSpace: "nowrap" }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Severity Filter pills */}
       <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
         {["all", "high", "medium", "low"].map((sev) => (
@@ -44,7 +131,7 @@ export default function AlertFeed({
           <div>No active alerts in this category.</div>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", overflowY: "auto" }}>
           {filtered.map((alert) => {
             const isSelected = selectedMmsi === alert.mmsi;
             const timeAgo = Math.round(
@@ -63,7 +150,7 @@ export default function AlertFeed({
               >
                 <div className="alert-top">
                   <span className={`alert-badge ${alert.severity}`}>
-                    {alert.alert_type.replace("_", " ")}
+                    {alert.alert_type.replace(/_/g, " ")}
                   </span>
                   <span className="alert-score">SCORE: {alert.score.toFixed(1)}x</span>
                 </div>
@@ -79,6 +166,12 @@ export default function AlertFeed({
                   {alert.details?.zone && (
                     <div className="alert-reason">
                       Region: <span style={{ color: "var(--silver-100)" }}>{alert.details.zone}</span>
+                    </div>
+                  )}
+
+                  {alert.details?.partner_mmsi && (
+                    <div className="alert-reason">
+                      Encounter Partner: <span style={{ color: "var(--color-stale)", fontWeight: 700 }}>MMSI {alert.details.partner_mmsi}</span>
                     </div>
                   )}
                 </div>
@@ -99,6 +192,13 @@ export default function AlertFeed({
                       <div className="evidence-cell">
                         <span>Expected p99</span>
                         <span>{(alert.details.p99_gap_s / 60).toFixed(0)} min</span>
+                      </div>
+                    )}
+
+                    {alert.details.distance_m !== undefined && (
+                      <div className="evidence-cell">
+                        <span>STS Distance</span>
+                        <span style={{ color: "var(--color-stale)" }}>{alert.details.distance_m} m</span>
                       </div>
                     )}
 

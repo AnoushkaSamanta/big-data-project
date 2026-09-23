@@ -10,12 +10,13 @@ CRITICAL DESIGN RULES:
 
 import argparse
 import csv
-from datetime import datetime, timedelta
 import json
 import logging
 import random
 import time
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any
+
 from confluent_kafka import Producer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -71,7 +72,7 @@ def run_producer(args):
     )
 
     # 1. Read and parse records
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     with open(args.input_file, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -104,7 +105,7 @@ def run_producer(args):
     # 3. Stream loop with out-of-order delay buffer
     prev_event_ts = None
     # Jitter buffer holds: (emit_after_event_time, record)
-    jitter_buffer: List[tuple[datetime, Dict[str, Any]]] = []
+    jitter_buffer: list[tuple[datetime, dict[str, Any]]] = []
 
     total_emitted = 0
     total_delayed = 0

@@ -13,11 +13,19 @@ export interface AlertRecord {
   details: {
     gap_s?: number;
     p99_gap_s?: number;
+    p50_gap_s?: number;
     cell?: string;
     coverage_n?: number;
     zone?: string;
+    zone_type?: string;
     transceiver_class?: string;
     implied_speed_knots?: number;
+    partner_mmsi?: number;
+    distance_m?: number;
+    sog_1_knots?: number;
+    sog_2_knots?: number;
+    reason?: string;
+    [key: string]: any;
   } | null;
 }
 
@@ -67,6 +75,24 @@ const SAMPLE_ALERTS: AlertRecord[] = [
     details: {
       implied_speed_knots: 84.5,
       transceiver_class: "A",
+    },
+  },
+  {
+    id: 4,
+    mmsi: 367123456,
+    alert_type: "rendezvous_sts",
+    score: 4.8,
+    severity: "high",
+    detected_at: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    last_lat: 37.785,
+    last_lon: -122.62,
+    details: {
+      partner_mmsi: 368987654,
+      distance_m: 120,
+      sog_1_knots: 0.8,
+      sog_2_knots: 1.1,
+      reason: "slow_speed_close_proximity_outside_port",
+      zone: "Offshore Farallones Corridor",
     },
   },
 ];

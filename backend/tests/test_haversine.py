@@ -2,9 +2,9 @@
 Unit tests for Haversine distance and implied speed calculation.
 """
 
-import math
 import pytest
-from detection.rules import haversine_km, calculate_implied_speed_knots
+
+from detection.rules import calculate_implied_speed_knots, haversine_km
 
 
 def test_identical_points():

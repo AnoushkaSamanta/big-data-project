@@ -16,11 +16,10 @@ Alert Deduplication:
 """
 
 import argparse
-from datetime import datetime, timezone
-import json
 import logging
 import os
 import time
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -107,17 +106,70 @@ SET status = 'dark'
 WHERE v.mmsi IN %s;
 """
 
+SWEEP_RENDEZVOUS_SQL = """
+WITH candidate_rendezvous AS (
+    SELECT
+        v1.mmsi AS mmsi_1,
+        v2.mmsi AS mmsi_2,
+        ROUND(ST_Distance(v1.last_geom::geography, v2.last_geom::geography)::numeric, 1) AS distance_m,
+        v1.last_lat,
+        v1.last_lon,
+        COALESCE(v1.last_sog, 0.0) AS sog_1,
+        COALESCE(v2.last_sog, 0.0) AS sog_2
+    FROM vessel_latest_state v1
+    JOIN vessel_latest_state v2
+      ON v1.mmsi < v2.mmsi
+     AND v1.last_seen > now() - interval '45 minutes'
+     AND v2.last_seen > now() - interval '45 minutes'
+     AND COALESCE(v1.last_sog, 0.0) <= 3.0
+     AND COALESCE(v2.last_sog, 0.0) <= 3.0
+     AND ST_DWithin(v1.last_geom::geography, v2.last_geom::geography, 500)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM geofences g
+        WHERE g.zone_type IN ('port', 'anchorage')
+          AND ST_Contains(g.geom, v1.last_geom)
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM alerts a
+        WHERE a.mmsi = v1.mmsi
+          AND a.alert_type = 'rendezvous_sts'
+          AND a.detected_at > now() - (%(dedup_hours)s || ' hours')::interval
+    )
+)
+INSERT INTO alerts (mmsi, alert_type, score, severity, detected_at, last_lat, last_lon, details)
+SELECT
+    cr.mmsi_1,
+    'rendezvous_sts',
+    ROUND((500.0 / GREATEST(cr.distance_m, 10.0))::numeric, 2) AS score,
+    'high' AS severity,
+    now(),
+    cr.last_lat,
+    cr.last_lon,
+    jsonb_build_object(
+        'partner_mmsi', cr.mmsi_2,
+        'distance_m', cr.distance_m,
+        'sog_1_knots', cr.sog_1,
+        'sog_2_knots', cr.sog_2,
+        'reason', 'slow_speed_close_proximity_outside_port'
+    )
+FROM candidate_rendezvous cr
+ON CONFLICT (mmsi, alert_type, date_trunc('hour', detected_at AT TIME ZONE 'UTC')) DO NOTHING
+RETURNING mmsi, score, severity, details;
+"""
+
 
 def perform_sweep(cursor, conn, args) -> int:
-    """Execute one absence detection sweep and return count of new alerts."""
+    """Execute absence detection and STS rendezvous sweeps and return count of new alerts."""
     params = {
         "min_obs": args.min_obs,
         "min_score": args.min_score,
         "dedup_hours": args.dedup_hours,
     }
 
+    # 1. Dark Vessel Absence Sweep
     cursor.execute(SWEEP_SQL, params)
     new_alerts = cursor.fetchall()
+    total_new = 0
 
     if new_alerts:
         dark_mmsis = tuple(row["mmsi"] for row in new_alerts)
@@ -131,10 +183,27 @@ def perform_sweep(cursor, conn, args) -> int:
                 f"Gap: {details.get('gap_s', 0)/3600:.1f}h (expected p99: {details.get('p99_gap_s', 0)/60:.0f}m) | "
                 f"Zone: {details.get('zone')} | Coverage Obs: {details.get('coverage_n')}"
             )
-        return len(new_alerts)
+        total_new += len(new_alerts)
+
+    # 2. Ship-to-Ship (STS) Rendezvous Sweep
+    try:
+        cursor.execute(SWEEP_RENDEZVOUS_SQL, {"dedup_hours": args.dedup_hours})
+        rendezvous_alerts = cursor.fetchall()
+        if rendezvous_alerts:
+            conn.commit()
+            for r_alert in rendezvous_alerts:
+                det = r_alert["details"]
+                logger.warning(
+                    f"⚓ [STS RENDEZVOUS ALERT] MMSI {r_alert['mmsi']} meeting {det.get('partner_mmsi')} | "
+                    f"Distance: {det.get('distance_m')}m | High Seas Encounter"
+                )
+            total_new += len(rendezvous_alerts)
+    except psycopg2.Error as err:
+        conn.rollback()
+        logger.debug(f"Rendezvous sweep query skipped: {err}")
 
     conn.commit()
-    return 0
+    return total_new
 
 
 def run_sweeper(args):

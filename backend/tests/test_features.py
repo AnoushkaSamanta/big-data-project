@@ -5,6 +5,7 @@ Unit tests for feature engineering (circular standard deviation, trajectory tort
 import numpy as np
 import pandas as pd
 import pytest
+
 from detection.features import circular_std_degrees, compute_trajectory_features
 
 

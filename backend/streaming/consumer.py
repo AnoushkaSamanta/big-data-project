@@ -11,18 +11,19 @@ offset commits to guarantee at-least-once delivery semantics without data corrup
 """
 
 import argparse
-from datetime import datetime, timezone
 import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
-from confluent_kafka import Consumer, KafkaError, Producer
+from datetime import datetime, timezone
+from typing import Any
+
 import psycopg2
+from confluent_kafka import Consumer, KafkaError, Producer
 from psycopg2.extras import execute_values
 
-from data_pipeline.validate import validate_record, normalize_sentinels
-from streaming.processor import process_batch, VesselState, Alert
+from data_pipeline.validate import normalize_sentinels, validate_record
+from streaming.processor import Alert, VesselState, process_batch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -48,9 +49,9 @@ def parse_args():
 def flush_batch_to_postgres(
     cursor,
     conn,
-    valid_records: List[Dict[str, Any]],
-    state_table: Dict[int, VesselState],
-    alerts: List[Alert],
+    valid_records: list[dict[str, Any]],
+    state_table: dict[int, VesselState],
+    alerts: list[Alert],
 ):
     """Batch insert positions, upsert latest state, and insert in-stream alerts."""
     if not valid_records and not alerts:
@@ -204,10 +205,10 @@ def run_consumer(args):
     logger.info(f"Subscribed to topic '{args.topic}'. DLQ topic: '{args.dlq_topic}'. Ready...")
 
     # In-memory vessel state table
-    state_table: Dict[int, VesselState] = {}
+    state_table: dict[int, VesselState] = {}
 
-    batch_records: List[Dict[str, Any]] = []
-    batch_messages: List[Any] = []
+    batch_records: list[dict[str, Any]] = []
+    batch_messages: list[Any] = []
     last_flush_time = time.time()
 
     total_consumed = 0

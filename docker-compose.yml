@@ -113,35 +113,6 @@ services:
         condition: service_healthy
     mem_limit: 400m
 
-  spark-master:
-    image: bitnami/spark:3.5.1
-    container_name: ais-spark-master
-    profiles: ["batch"]
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-    ports:
-      - "127.0.0.1:8080:8080"
-      - "127.0.0.1:7077:7077"
-    volumes:
-      - .:/app
-    mem_limit: 1500m
-
-  spark-worker:
-    image: bitnami/spark:3.5.1
-    container_name: ais-spark-worker
-    profiles: ["batch"]
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=2G
-      - SPARK_WORKER_CORES=2
-    depends_on:
-      - spark-master
-    volumes:
-      - .:/app
-    mem_limit: 2000m
 
 volumes:
   pgdata:

@@ -8,10 +8,10 @@ to eliminate train/serve skew.
 """
 
 import argparse
-from datetime import datetime, timezone
 import logging
-import os
+from datetime import datetime, timezone
 from pathlib import Path
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -19,7 +19,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
 
-from detection.features import compute_trajectory_features, FEATURE_NAMES
+from detection.features import FEATURE_NAMES, compute_trajectory_features
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

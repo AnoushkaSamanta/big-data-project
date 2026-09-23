@@ -6,18 +6,20 @@ and records 'ml_anomaly' alerts with top contributing feature explanations.
 """
 
 import argparse
-from datetime import datetime, timezone
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-from detection.features import compute_trajectory_features, FEATURE_NAMES
+from detection.features import FEATURE_NAMES, compute_trajectory_features
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,7 +41,8 @@ def load_model_bundle(model_path: str):
     p = Path(model_path)
     if not p.exists():
         logger.warning(f"Model file {model_path} not found. Running training on sample data first...")
-        from detection.train import train_model, parse_args as train_parse_args
+        from detection.train import parse_args as train_parse_args
+        from detection.train import train_model
 
         train_model(train_parse_args())
 
@@ -49,7 +52,7 @@ def load_model_bundle(model_path: str):
     return bundle
 
 
-def get_top_contributing_features(scaler, feature_names, x_raw: np.ndarray, top_k: int = 3) -> List[Dict[str, Any]]:
+def get_top_contributing_features(scaler, feature_names, x_raw: np.ndarray, top_k: int = 3) -> list[dict[str, Any]]:
     """Estimate top anomalous features based on robust z-score magnitude."""
     # RobustScaler center is median, scale is IQR
     medians = scaler.center_

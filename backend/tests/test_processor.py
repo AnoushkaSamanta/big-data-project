@@ -3,8 +3,8 @@ Unit tests for pure stream processor and in-stream rule anomaly detectors.
 """
 
 from datetime import datetime, timezone
-import pytest
-from streaming.processor import process_batch, VesselState, Alert
+
+from streaming.processor import VesselState, process_batch
 
 
 def test_process_batch_normal_track():
@@ -66,7 +66,7 @@ def test_process_batch_extreme_speed_spoof():
         },
     ]
 
-    processed, alerts = process_batch(records, state_table)
+    _processed, alerts = process_batch(records, state_table)
     assert len(alerts) >= 1
     assert alerts[0].alert_type == "spoof"
     assert alerts[0].severity == "high"
@@ -92,6 +92,6 @@ def test_process_batch_mmsi_collision():
         "VesselType": 70,
     }
 
-    processed, alerts = process_batch([record], state_table)
+    _processed, alerts = process_batch([record], state_table)
     assert len(alerts) == 1
     assert alerts[0].alert_type == "mmsi_collision"

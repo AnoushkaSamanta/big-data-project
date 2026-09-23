@@ -2,8 +2,7 @@
 Unit tests for AIS record validation and sentinel normalization.
 """
 
-import pytest
-from data_pipeline.validate import validate_record, normalize_sentinels
+from data_pipeline.validate import normalize_sentinels, validate_record
 
 
 def test_valid_record():

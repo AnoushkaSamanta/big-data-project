@@ -6,8 +6,7 @@ this contract before downstream processing. Normalizing sentinel values and
 rejecting invalid records here prevents corrupting spatial math and false alerts.
 """
 
-from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 # AIS Standard Sentinel Values (ITU-R M.1371)
 # When transponders have no valid sensor data, they broadcast standard sentinels.
@@ -18,7 +17,7 @@ SENTINEL_LAT = 91.0        # Latitude: 91.0 = default / unassigned
 SENTINEL_LON = 181.0       # Longitude: 181.0 = default / unassigned
 
 
-def validate_record(r: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+def validate_record(r: dict[str, Any]) -> tuple[bool, str | None]:
     """
     Validate an incoming AIS record against contract rules.
 
@@ -52,7 +51,7 @@ def validate_record(r: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
-def normalize_sentinels(r: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_sentinels(r: dict[str, Any]) -> dict[str, Any]:
     """
     Convert AIS sentinel sensor values to None (null in database).
     This ensures sentinels don't poison downstream numerical aggregates.

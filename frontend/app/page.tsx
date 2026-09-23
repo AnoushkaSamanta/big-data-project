@@ -8,7 +8,7 @@ import AlertFeed from "@/components/AlertFeed";
 import VesselDrawer from "@/components/VesselDrawer";
 import { VesselState } from "@/app/api/vessels/route";
 import { AlertRecord } from "@/app/api/alerts/route";
-import { ShieldAlert, Layers, Bell, MapPin } from "lucide-react";
+import { ShieldAlert, Layers, Bell, MapPin, Radar } from "lucide-react";
 
 export default function SurveillanceDashboard() {
   const [vessels, setVessels] = useState<VesselState[]>([]);
@@ -27,6 +27,7 @@ export default function SurveillanceDashboard() {
   const [vesselTrack, setVesselTrack] = useState<Array<{ lat: number; lon: number; ts: string }>>([]);
   const [showGeofences, setShowGeofences] = useState<boolean>(true);
   const [showPlaceNames, setShowPlaceNames] = useState<boolean>(true);
+  const [showDriftCones, setShowDriftCones] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
 
@@ -144,6 +145,7 @@ export default function SurveillanceDashboard() {
           vesselTrack={vesselTrack}
           showGeofences={showGeofences}
           showPlaceNames={showPlaceNames}
+          showDriftCones={showDriftCones}
         />
 
         {/* Floating map layer toggles */}
@@ -163,6 +165,15 @@ export default function SurveillanceDashboard() {
           >
             <Layers size={14} />
             <span>EEZ / MPA GEOFENCES</span>
+          </button>
+
+          <button
+            onClick={() => setShowDriftCones(!showDriftCones)}
+            className={`toggle-btn ${showDriftCones ? "active" : ""}`}
+            title="Toggle tactical dead-reckoning search uncertainty cones for dark vessels"
+          >
+            <Radar size={14} />
+            <span>DRIFT CONES: {showDriftCones ? "ON" : "OFF"}</span>
           </button>
 
           <button

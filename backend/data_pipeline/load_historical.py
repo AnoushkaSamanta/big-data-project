@@ -6,13 +6,11 @@ Validates records using data_pipeline.validate.validate_record.
 
 import argparse
 import logging
-import os
 from pathlib import Path
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 
-from data_pipeline.validate import validate_record, normalize_sentinels
+import pandas as pd
+
+from data_pipeline.validate import normalize_sentinels, validate_record
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

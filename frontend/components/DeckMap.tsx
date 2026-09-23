@@ -9,6 +9,7 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
 import { Globe, Compass, Moon } from "lucide-react";
+import { computeDriftCone, DriftConeFeature } from "@/lib/drift";
 
 interface DeckMapProps {
   vessels: VesselState[];
@@ -18,6 +19,7 @@ interface DeckMapProps {
   vesselTrack: Array<{ lat: number; lon: number; ts: string }>;
   showGeofences: boolean;
   showPlaceNames?: boolean;
+  showDriftCones?: boolean;
 }
 
 const INITIAL_VIEW_STATE = {
@@ -106,6 +108,7 @@ export default function DeckMap({
   vesselTrack,
   showGeofences,
   showPlaceNames = true,
+  showDriftCones = true,
 }: DeckMapProps) {
   const [hoverInfo, setHoverInfo] = useState<any>(null);
   const [activeBasemap, setActiveBasemap] = useState<"satellite" | "ocean" | "dark">("satellite");
@@ -180,6 +183,36 @@ export default function DeckMap({
       );
     }
 
+    // 3. Dead-Reckoning Drift Search Cones for Dark Vessels
+    const darkVesselsToRender = showDriftCones
+      ? vessels.filter((v) => v.status === "dark")
+      : selectedVessel && selectedVessel.status === "dark"
+      ? [selectedVessel]
+      : [];
+
+    if (darkVesselsToRender.length > 0) {
+      const coneFeatures: DriftConeFeature[] = darkVesselsToRender.map((v) =>
+        computeDriftCone(v.mmsi, v.lat, v.lon, v.sog, v.cog, v.last_seen)
+      );
+
+      list.push(
+        new GeoJsonLayer({
+          id: "drift-cones-layer",
+          data: {
+            type: "FeatureCollection",
+            features: coneFeatures,
+          },
+          pickable: true,
+          stroked: true,
+          filled: true,
+          lineWidthMinPixels: 1.5,
+          getLineColor: [248, 113, 113, 220], // Luminous crimson edge
+          getFillColor: [239, 68, 68, 55],    // Translucent search wedge
+          getLineWidth: 2,
+        })
+      );
+    }
+
     // 3. Vessel Scatterplot Layer (High performance GPU rendering for 10k+ points)
     list.push(
       new ScatterplotLayer<VesselState>({
@@ -227,7 +260,7 @@ export default function DeckMap({
     );
 
     return list;
-  }, [vessels, geofences, selectedVessel, vesselTrack, showGeofences, onSelectVessel]);
+  }, [vessels, geofences, selectedVessel, vesselTrack, showGeofences, onSelectVessel, showDriftCones]);
 
   return (
     <div className="map-viewport" style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -362,16 +395,29 @@ export default function DeckMap({
             boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
           }}
         >
-          <div style={{ fontWeight: 700, color: "var(--silver-200)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-            <span>MMSI: {hoverInfo.object.mmsi}</span>
-          </div>
-          <div>Status: <span style={{ textTransform: "uppercase", fontWeight: 600 }}>{hoverInfo.object.status}</span></div>
-          <div>Speed: {hoverInfo.object.sog !== null ? `${hoverInfo.object.sog} kn` : "N/A"}</div>
-          <div>Heading: {hoverInfo.object.heading !== null ? `${hoverInfo.object.heading}°` : "N/A"}</div>
-          <div>Class: {hoverInfo.object.transceiver_class || "A"}</div>
-          <div style={{ fontSize: "10px", color: "var(--silver-400)", marginTop: "4px" }}>
-            Lat: {Number(hoverInfo.object.lat).toFixed(4)}, Lon: {Number(hoverInfo.object.lon).toFixed(4)}
-          </div>
+          {hoverInfo.object.properties && hoverInfo.object.properties.distance_km !== undefined ? (
+            <div>
+              <div style={{ fontWeight: 700, color: "#f87171", marginBottom: "4px" }}>
+                TACTICAL SEARCH CONE // MMSI {hoverInfo.object.properties.mmsi}
+              </div>
+              <div>Elapsed Silent: {hoverInfo.object.properties.elapsed_hours} hrs</div>
+              <div>Est. Displacement: {hoverInfo.object.properties.distance_km} km</div>
+              <div>Last Track: {hoverInfo.object.properties.sog_knots} kn @ {hoverInfo.object.properties.cog_degrees}°</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontWeight: 700, color: "var(--silver-200)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>MMSI: {hoverInfo.object.mmsi}</span>
+              </div>
+              <div>Status: <span style={{ textTransform: "uppercase", fontWeight: 600 }}>{hoverInfo.object.status}</span></div>
+              <div>Speed: {hoverInfo.object.sog !== null ? `${hoverInfo.object.sog} kn` : "N/A"}</div>
+              <div>Heading: {hoverInfo.object.heading !== null ? `${hoverInfo.object.heading}°` : "N/A"}</div>
+              <div>Class: {hoverInfo.object.transceiver_class || "A"}</div>
+              <div style={{ fontSize: "10px", color: "var(--silver-400)", marginTop: "4px" }}>
+                Lat: {Number(hoverInfo.object.lat).toFixed(4)}, Lon: {Number(hoverInfo.object.lon).toFixed(4)}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -391,6 +437,10 @@ export default function DeckMap({
         <div className="legend-item">
           <div className="legend-swatch dark" />
           <span>Dark Vessel Anomaly (Gap &gt; p99)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-swatch" style={{ background: "rgba(239, 68, 68, 0.4)", border: "1px dashed #f87171" }} />
+          <span>Drift Uncertainty Search Zone</span>
         </div>
         <div className="legend-item">
           <div className="legend-swatch geofence" />

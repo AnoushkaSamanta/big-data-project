@@ -11,10 +11,9 @@ Computes:
 """
 
 import argparse
-import json
 import logging
 import os
-from typing import Any, Dict, List, Tuple
+
 import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -56,7 +55,6 @@ def evaluate_detector(db_url: str):
     logger.info(f"Loaded {len(df_gt)} ground-truth anomalies and {len(df_alerts)} system alerts.")
 
     # 3. Match alerts with ground-truth events on MMSI and temporal overlap
-    anomaly_types = ["dark_vessel", "spoof", "loiter", "mmsi_collision"]
     # Mapping ground-truth anomaly_type to alert_type
     gt_to_alert_map = {
         "dark": "dark_vessel",

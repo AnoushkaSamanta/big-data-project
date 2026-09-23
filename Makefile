@@ -13,10 +13,10 @@ up:              ## Start core services (Kafka KRaft, PostGIS) and wait for heal
 	@./scripts/create_topics.sh
 
 down:            ## Stop all running services, preserving data volumes
-	docker compose --profile stream --profile batch --profile ui down
+	docker compose --profile stream --profile ui down
 
 nuke:            ## Stop everything and delete all persistent volumes
-	docker compose --profile stream --profile batch --profile ui down -v
+	docker compose --profile stream --profile ui down -v
 
 topics:          ## Create/verify Kafka topics and partitions
 	@./scripts/create_topics.sh
@@ -60,3 +60,5 @@ test:            ## Run pytest test suite for backend
 
 lint:            ## Lint Python codebase with ruff
 	uv run --no-sync --project backend ruff check backend/
+
+ci: lint test    ## Run complete CI check (lint + test)

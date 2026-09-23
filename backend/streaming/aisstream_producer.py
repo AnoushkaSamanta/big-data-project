@@ -8,14 +8,15 @@ and streams them into Apache Kafka topic 'ais.positions.raw' (keyed by MMSI).
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any
+
+import websockets
 from confluent_kafka import Producer
 from dotenv import load_dotenv
-import websockets
 
 # Load environment variables from .env
 load_dotenv()
@@ -67,7 +68,7 @@ def parse_aisstream_timestamp(time_utc_str: str) -> str:
         return datetime.now(timezone.utc).isoformat()
 
 
-def transform_aisstream_message(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def transform_aisstream_message(data: dict[str, Any]) -> dict[str, Any] | None:
     """Transform raw AISStream JSON object into our standard pipeline schema."""
     msg_type = data.get("MessageType")
     meta = data.get("MetaData", {})

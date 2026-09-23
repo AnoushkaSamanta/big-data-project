@@ -15,8 +15,9 @@ import json
 import logging
 import os
 from pathlib import Path
+
 import psycopg2
-from shapely.geometry import shape, MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon, Polygon, shape
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -115,12 +116,12 @@ def to_multipolygon_wkt(poly_geom) -> str:
     elif isinstance(poly_geom, MultiPolygon):
         mp = poly_geom
     else:
-        raise ValueError(f"Unsupported geometry type: {type(poly_geom)}")
+        raise TypeError(f"Unsupported geometry type: {type(poly_geom)}")
     return mp.wkt
 
 
 def load_geofences(in_dir: str, db_url: str):
-    logger.info(f"Connecting to database to load geofences...")
+    logger.info("Connecting to database to load geofences...")
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
 

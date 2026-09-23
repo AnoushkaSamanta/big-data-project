@@ -9,14 +9,14 @@ Generates ground-truth labeled anomalies to evaluate detector precision/recall:
 """
 
 import argparse
-import logging
-import random
-import psycopg2
-import pandas as pd
-from datetime import timedelta
-import os
-from pathlib import Path
 import json
+import logging
+import os
+import random
+from pathlib import Path
+
+import pandas as pd
+import psycopg2
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

@@ -14,11 +14,12 @@ import argparse
 import logging
 import os
 from pathlib import Path
+
+import h3
+import numpy as np
+import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
-import pandas as pd
-import numpy as np
-import h3
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -55,10 +56,15 @@ def lat_lon_to_h3(lat: float, lon: float, res: int) -> str:
 
 def build_coverage_prior_spark(args):
     """Distributed coverage prior computation using PySpark."""
-    from pyspark.sql import SparkSession
-    from pyspark.sql import functions as F
-    from pyspark.sql.window import Window
-    from pyspark.sql.types import StringType
+    try:
+        from pyspark.sql import SparkSession
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import StringType
+        from pyspark.sql.window import Window
+    except ImportError:
+        logger.warning("PySpark is not installed. Falling back to native Pandas/DuckDB engine.")
+        build_coverage_prior_pandas(args)
+        return
 
     logger.info("Starting PySpark session for coverage prior calculation...")
     spark = (

@@ -8,8 +8,9 @@ unit testing of state transitions, watermarks, and in-stream anomaly rules.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from detection.rules import haversine_km, calculate_implied_speed_knots
+from typing import Any
+
+from detection.rules import calculate_implied_speed_knots, haversine_km
 
 
 @dataclass
@@ -18,16 +19,16 @@ class VesselState:
     last_seen: datetime
     last_lat: float
     last_lon: float
-    last_sog: Optional[float] = None
-    last_cog: Optional[float] = None
-    last_heading: Optional[float] = None
-    vessel_type: Optional[int] = None
-    transceiver_class: Optional[str] = "A"
-    last_cell: Optional[str] = None
+    last_sog: float | None = None
+    last_cog: float | None = None
+    last_heading: float | None = None
+    vessel_type: int | None = None
+    transceiver_class: str | None = "A"
+    last_cell: str | None = None
     msg_count: int = 1
     status: str = "active"  # 'active', 'stale', 'dark'
     # History buffer for jump-and-return spoofing detection (stores last 3 positions)
-    recent_pings: List[Tuple[datetime, float, float]] = field(default_factory=list)
+    recent_pings: list[tuple[datetime, float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -39,7 +40,7 @@ class Alert:
     detected_at: datetime
     last_lat: float
     last_lon: float
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 # Maximum reasonable speeds by vessel type in knots
@@ -64,15 +65,15 @@ def parse_iso_timestamp(ts_val: Any) -> datetime:
 
 
 def detect_in_stream_anomalies(
-    record: Dict[str, Any],
-    curr_state: Optional[VesselState],
-) -> List[Alert]:
+    record: dict[str, Any],
+    curr_state: VesselState | None,
+) -> list[Alert]:
     """
     Evaluate in-stream rules on arrival of a new ping:
     1. Implied speed violations
     2. Jump-and-return spoofing patterns
     """
-    alerts: List[Alert] = []
+    alerts: list[Alert] = []
     if curr_state is None:
         return alerts
 
@@ -168,9 +169,9 @@ def detect_in_stream_anomalies(
 
 
 def process_batch(
-    records: List[Dict[str, Any]],
-    state_table: Dict[int, VesselState],
-) -> Tuple[List[Dict[str, Any]], List[Alert]]:
+    records: list[dict[str, Any]],
+    state_table: dict[int, VesselState],
+) -> tuple[list[dict[str, Any]], list[Alert]]:
     """
     Pure batch processor.
 
@@ -181,8 +182,8 @@ def process_batch(
     Returns:
         (updated_records, generated_alerts)
     """
-    generated_alerts: List[Alert] = []
-    processed_records: List[Dict[str, Any]] = []
+    generated_alerts: list[Alert] = []
+    processed_records: list[dict[str, Any]] = []
 
     for r in records:
         mmsi = int(r["MMSI"])
