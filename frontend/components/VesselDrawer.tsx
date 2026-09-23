@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { VesselState } from "@/app/api/vessels/route";
 import { X, Navigation, ShieldAlert, Download, Radar, Camera, ExternalLink, Ship, Globe } from "lucide-react";
 import { computeDriftCone } from "@/lib/drift";
@@ -26,6 +26,36 @@ export default function VesselDrawer({
   onClose,
   trackPoints,
 }: VesselDrawerProps) {
+  const [realPhoto, setRealPhoto] = useState<string | null>(null);
+  const [isRealPhoto, setIsRealPhoto] = useState<boolean>(false);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vessel) return;
+    setRealPhoto(null);
+    setIsRealPhoto(false);
+    setResolvedName(null);
+
+    let isMounted = true;
+    fetch(`/api/vessels/${vessel.mmsi}/photo`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data.photo_url && data.is_real_photo) {
+          setRealPhoto(data.photo_url);
+          setIsRealPhoto(true);
+        }
+        if (data.vessel_name && !vessel.vessel_name) {
+          setResolvedName(data.vessel_name);
+        }
+      })
+      .catch((err) => console.debug("Photo fetch error:", err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [vessel?.mmsi]);
+
   if (!vessel) return null;
 
   const country = getVesselCountry(vessel.mmsi);
@@ -34,6 +64,8 @@ export default function VesselDrawer({
   const motion = getMotionState(vessel.sog, vessel.status);
   const navStatus = getNavStatusName(null, vessel.sog);
   const voyage = getVoyageDetails(vessel.mmsi, vessel.vessel_type, vessel.last_seen);
+  const activeName = vessel.vessel_name || resolvedName || `VESSEL ${vessel.mmsi}`;
+  const activePhotoUrl = realPhoto || photo.url;
 
   // Compute tactical dead-reckoning search zone if vessel is dark
   const driftZone = useMemo(() => {
@@ -57,7 +89,7 @@ export default function VesselDrawer({
         generated_at: new Date().toISOString(),
         vessel: {
           mmsi: vessel.mmsi,
-          vessel_name: vessel.vessel_name || null,
+          vessel_name: activeName !== `VESSEL ${vessel.mmsi}` ? activeName : null,
           country: country.country,
           flag: country.flag,
           status: vessel.status,
@@ -81,7 +113,7 @@ export default function VesselDrawer({
             coordinates: [vessel.lon, vessel.lat],
           },
           properties: {
-            name: `Last Known Position - ${vessel.vessel_name || `MMSI ${vessel.mmsi}`}`,
+            name: `Last Known Position - ${activeName}`,
             timestamp: vessel.last_seen,
             status: vessel.status,
             sog_knots: vessel.sog,
@@ -131,7 +163,7 @@ export default function VesselDrawer({
           </span>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <span style={{ fontWeight: 700, letterSpacing: "0.02em", color: "var(--silver-100)" }}>
-              {vessel.vessel_name || `VESSEL ${vessel.mmsi}`}
+              {activeName}
             </span>
             <span style={{ fontSize: "11px", color: "var(--silver-400)", fontFamily: "var(--font-mono)" }}>
               {country.country} ({country.code}) • MMSI {vessel.mmsi}
@@ -156,58 +188,131 @@ export default function VesselDrawer({
         {/* 1. Hero Vessel Photography Banner (MarineTraffic-Style) */}
         <div className="vessel-photo-banner">
           <img
-            src={photo.url}
-            alt={vessel.vessel_name || `Vessel ${vessel.mmsi}`}
+            src={activePhotoUrl}
+            alt={activeName}
             className="vessel-photo-img"
           />
           <div className="vessel-photo-overlay">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  background: "rgba(10, 15, 26, 0.88)",
-                  backdropFilter: "blur(6px)",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  fontWeight: 600,
-                  border: "1px solid var(--silver-border-subtle)",
-                }}
-              >
-                <span className={`motion-beacon ${motion.statusClass}`} />
-                <span style={{ color: motion.color }}>{motion.label}</span>
-              </span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "6px" }}>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(10, 15, 26, 0.88)",
+                    backdropFilter: "blur(6px)",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    border: "1px solid var(--silver-border-subtle)",
+                  }}
+                >
+                  <span className={`motion-beacon ${motion.statusClass}`} />
+                  <span style={{ color: motion.color }}>{motion.label}</span>
+                </span>
 
-              <a
-                href={getMarineTrafficUrl(vessel.mmsi)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  background: "rgba(10, 15, 26, 0.88)",
-                  backdropFilter: "blur(6px)",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                  fontSize: "10px",
-                  color: "#38bdf8",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  textDecoration: "none",
-                  border: "1px solid rgba(56, 189, 248, 0.3)",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                <span>MarineTraffic</span>
-                <ExternalLink size={10} />
-              </a>
+                {isRealPhoto ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: "rgba(16, 185, 129, 0.25)",
+                      backdropFilter: "blur(6px)",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "10px",
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 700,
+                      color: "#34d399",
+                      border: "1px solid rgba(52, 211, 153, 0.6)",
+                      boxShadow: "0 0 8px rgba(16, 185, 129, 0.3)",
+                    }}
+                    title="Verified real photograph of this specific ship from maritime spotter registry"
+                  >
+                    <Camera size={11} />
+                    <span>VERIFIED SHIP PHOTO</span>
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: "rgba(10, 15, 26, 0.85)",
+                      backdropFilter: "blur(6px)",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "10px",
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--silver-400)",
+                      border: "1px solid var(--silver-border-subtle)",
+                    }}
+                    title="Real maritime photography for this vessel class (specific spotter photo pending)"
+                  >
+                    <Camera size={11} />
+                    <span>CLASS PHOTO</span>
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "6px" }}>
+                <a
+                  href={getVesselFinderUrl(vessel.mmsi)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: "rgba(10, 15, 26, 0.88)",
+                    backdropFilter: "blur(6px)",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "10px",
+                    color: "#34d399",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    textDecoration: "none",
+                    border: "1px solid rgba(52, 211, 153, 0.3)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                  title="View hull in VesselFinder Spotter Database"
+                >
+                  <span>VesselFinder</span>
+                  <ExternalLink size={10} />
+                </a>
+
+                <a
+                  href={getMarineTrafficUrl(vessel.mmsi)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: "rgba(10, 15, 26, 0.88)",
+                    backdropFilter: "blur(6px)",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "10px",
+                    color: "#38bdf8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    textDecoration: "none",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                  title="View hull in MarineTraffic AIS Fleet Database"
+                >
+                  <span>MarineTraffic</span>
+                  <ExternalLink size={10} />
+                </a>
+              </div>
             </div>
 
             <div>
               <div style={{ fontSize: "16px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.02em", textShadow: "0 2px 8px rgba(0,0,0,0.85)" }}>
-                {vessel.vessel_name || `VESSEL ${vessel.mmsi}`}
+                {activeName}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--silver-300)", textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
                 <span>{country.flag} {country.country}</span>
