@@ -10,7 +10,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
 import { Globe, Compass, Moon } from "lucide-react";
 import { computeDriftCone, DriftConeFeature } from "@/lib/drift";
-import { getVesselCountry, getVesselTypeName } from "@/lib/mmsi";
+import {
+  getVesselCountry,
+  getVesselTypeName,
+  getVesselPhoto,
+  getMotionState,
+  getNavStatusName,
+  getVoyageDetails,
+} from "@/lib/mmsi";
 
 interface DeckMapProps {
   vessels: VesselState[];
@@ -409,21 +416,57 @@ export default function DeckMap({
             (() => {
               const country = getVesselCountry(hoverInfo.object.mmsi);
               const vTypeName = getVesselTypeName(hoverInfo.object.vessel_type);
+              const photo = getVesselPhoto(hoverInfo.object.vessel_type, hoverInfo.object.mmsi);
+              const motion = getMotionState(hoverInfo.object.sog, hoverInfo.object.status);
+              const navStatus = getNavStatusName(null, hoverInfo.object.sog);
+              const voyage = getVoyageDetails(hoverInfo.object.mmsi, hoverInfo.object.vessel_type, hoverInfo.object.last_seen);
+
               return (
-                <div>
-                  <div style={{ fontWeight: 700, color: "var(--silver-200)", marginBottom: "3px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ fontSize: "14px" }}>{country.flag}</span>
-                    <span>{hoverInfo.object.vessel_name || `MMSI: ${hoverInfo.object.mmsi}`}</span>
+                <div style={{ maxWidth: "260px" }}>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+                    <img
+                      src={photo.url}
+                      alt={hoverInfo.object.vessel_name || `MMSI: ${hoverInfo.object.mmsi}`}
+                      style={{
+                        width: "68px",
+                        height: "48px",
+                        objectFit: "cover",
+                        borderRadius: "4px",
+                        border: "1px solid var(--silver-border-glow)",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: "var(--silver-100)", fontSize: "13px", display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <span>{country.flag}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{hoverInfo.object.vessel_name || `MMSI: ${hoverInfo.object.mmsi}`}</span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--silver-400)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {vTypeName}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--silver-400)", marginBottom: "4px" }}>
-                    {country.country} • {vTypeName}
+
+                  {/* Motion Pill */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                    <span className={`motion-beacon ${motion.statusClass}`} />
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: motion.color }}>{motion.label}</span>
                   </div>
-                  <div>Status: <span style={{ textTransform: "uppercase", fontWeight: 600 }}>{hoverInfo.object.status}</span></div>
-                  <div>Speed: {hoverInfo.object.sog !== null && hoverInfo.object.sog !== undefined ? `${Number(hoverInfo.object.sog).toFixed(1)} kn` : "N/A"}</div>
-                  <div>Heading: {hoverInfo.object.heading !== null && hoverInfo.object.heading !== undefined ? `${Number(hoverInfo.object.heading).toFixed(1)}°` : "N/A"}</div>
-                  <div>Class: {hoverInfo.object.transceiver_class || "A"}</div>
-                  <div style={{ fontSize: "10px", color: "var(--silver-500)", marginTop: "4px" }}>
-                    Lat: {Number(hoverInfo.object.lat).toFixed(4)}, Lon: {Number(hoverInfo.object.lon).toFixed(4)}
+
+                  {/* Route corridor */}
+                  <div style={{ fontSize: "11px", color: "var(--silver-300)", marginBottom: "4px" }}>
+                    Route: <span style={{ color: "#38bdf8", fontWeight: 600 }}>{voyage.originCode} ➔ {voyage.destCode}</span>
+                  </div>
+
+                  <div style={{ fontSize: "11px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", borderTop: "1px solid var(--silver-border-subtle)", paddingTop: "6px" }}>
+                    <div>Nav: <span style={{ color: "var(--silver-200)" }}>{navStatus.split(" ")[0]}</span></div>
+                    <div>Draught: <span style={{ color: "var(--silver-200)" }}>{voyage.draughtMeters}m</span></div>
+                    <div>Course: <span style={{ color: "var(--silver-200)" }}>{hoverInfo.object.cog !== null && hoverInfo.object.cog !== undefined ? `${Number(hoverInfo.object.cog).toFixed(0)}°` : "N/A"}</span></div>
+                    <div>Class: <span style={{ color: "var(--silver-200)" }}>Class {hoverInfo.object.transceiver_class || "A"}</span></div>
+                  </div>
+
+                  <div style={{ fontSize: "10px", color: "var(--silver-500)", marginTop: "6px", textAlign: "right" }}>
+                    Click vessel to inspect full dossier ➔
                   </div>
                 </div>
               );

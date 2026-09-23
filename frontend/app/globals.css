@@ -569,6 +569,111 @@ body {
   font-weight: 600;
 }
 
+/* MarineTraffic-Style Vessel Photo Banner & Motion Telemetry */
+.vessel-photo-banner {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--silver-border-glow);
+  background: #0b0f19;
+}
+
+.vessel-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.vessel-photo-banner:hover .vessel-photo-img {
+  transform: scale(1.03);
+}
+
+.vessel-photo-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7, 8, 11, 0.15) 0%, rgba(7, 8, 11, 0.85) 100%);
+  display: flex;
+  flex-direction: column;
+  justifyContent: space-between;
+  padding: 10px 12px;
+}
+
+.motion-beacon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.motion-beacon.moving {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  animation: pulse-beacon 1.5s infinite;
+}
+
+.motion-beacon.stopped {
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+.motion-beacon.dark {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: pulse-beacon 1s infinite;
+}
+
+@keyframes pulse-beacon {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.voyage-timeline {
+  background: var(--bg-card-inner);
+  border: 1px solid var(--silver-border-subtle);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.voyage-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 2px;
+  position: relative;
+  margin: 12px 0 8px;
+}
+
+.voyage-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #3b82f6);
+  border-radius: 2px;
+}
+
+.voyage-ship-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: #0ea5e9;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 8px #0ea5e9;
+}
+
 /* Architecture & Intelligence Documentation Page Styles */
 .arch-container {
   min-height: 100vh;

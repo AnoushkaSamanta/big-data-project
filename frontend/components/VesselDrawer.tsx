@@ -4,7 +4,16 @@ import React, { useMemo } from "react";
 import { VesselState } from "@/app/api/vessels/route";
 import { X, Navigation, ShieldAlert, Download, Radar, Camera, ExternalLink, Ship, Globe } from "lucide-react";
 import { computeDriftCone } from "@/lib/drift";
-import { getVesselCountry, getVesselTypeName, getMarineTrafficUrl, getVesselFinderUrl } from "@/lib/mmsi";
+import {
+  getVesselCountry,
+  getVesselTypeName,
+  getMarineTrafficUrl,
+  getVesselFinderUrl,
+  getVesselPhoto,
+  getMotionState,
+  getNavStatusName,
+  getVoyageDetails,
+} from "@/lib/mmsi";
 
 interface VesselDrawerProps {
   vessel: VesselState | null;
@@ -21,6 +30,10 @@ export default function VesselDrawer({
 
   const country = getVesselCountry(vessel.mmsi);
   const vesselTypeName = getVesselTypeName(vessel.vessel_type);
+  const photo = getVesselPhoto(vessel.vessel_type, vessel.mmsi);
+  const motion = getMotionState(vessel.sog, vessel.status);
+  const navStatus = getNavStatusName(null, vessel.sog);
+  const voyage = getVoyageDetails(vessel.mmsi, vessel.vessel_type, vessel.last_seen);
 
   // Compute tactical dead-reckoning search zone if vessel is dark
   const driftZone = useMemo(() => {
@@ -140,61 +153,131 @@ export default function VesselDrawer({
       </div>
 
       <div className="drawer-content" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {/* Status header banner */}
+        {/* 1. Hero Vessel Photography Banner (MarineTraffic-Style) */}
+        <div className="vessel-photo-banner">
+          <img
+            src={photo.url}
+            alt={vessel.vessel_name || `Vessel ${vessel.mmsi}`}
+            className="vessel-photo-img"
+          />
+          <div className="vessel-photo-overlay">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "rgba(10, 15, 26, 0.88)",
+                  backdropFilter: "blur(6px)",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 600,
+                  border: "1px solid var(--silver-border-subtle)",
+                }}
+              >
+                <span className={`motion-beacon ${motion.statusClass}`} />
+                <span style={{ color: motion.color }}>{motion.label}</span>
+              </span>
+
+              <a
+                href={getMarineTrafficUrl(vessel.mmsi)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: "rgba(10, 15, 26, 0.88)",
+                  backdropFilter: "blur(6px)",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  fontSize: "10px",
+                  color: "#38bdf8",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  textDecoration: "none",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                <span>MarineTraffic</span>
+                <ExternalLink size={10} />
+              </a>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.02em", textShadow: "0 2px 8px rgba(0,0,0,0.85)" }}>
+                {vessel.vessel_name || `VESSEL ${vessel.mmsi}`}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--silver-300)", textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
+                <span>{country.flag} {country.country}</span>
+                <span>•</span>
+                <span>{vesselTypeName}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. MarineTraffic Voyage Corridor & Progress Timeline */}
+        <div className="voyage-timeline">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
+            <div>
+              <div style={{ color: "var(--silver-500)", fontSize: "10px", textTransform: "uppercase" }}>Origin (ATD)</div>
+              <div style={{ fontWeight: 700, color: "var(--silver-100)", fontSize: "13px" }}>{voyage.originCode}</div>
+              <div style={{ color: "var(--silver-400)", fontSize: "10px" }}>{voyage.originName}</div>
+            </div>
+            <div style={{ textAlign: "center", color: "#38bdf8", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px", padding: "0 8px" }}>
+              <span>───</span>
+              <Ship size={14} />
+              <span>───➔</span>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ color: "var(--silver-500)", fontSize: "10px", textTransform: "uppercase" }}>Destination (ETA)</div>
+              <div style={{ fontWeight: 700, color: "var(--silver-100)", fontSize: "13px" }}>{voyage.destCode}</div>
+              <div style={{ color: "var(--silver-400)", fontSize: "10px" }}>{voyage.destName}</div>
+            </div>
+          </div>
+
+          {/* Voyage Progress Track */}
+          <div className="voyage-progress-track">
+            <div className="voyage-progress-fill" style={{ width: `${voyage.progressPercent}%` }} />
+            <div className="voyage-ship-marker" style={{ left: `${voyage.progressPercent}%` }} />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--silver-400)", fontFamily: "var(--font-mono)" }}>
+            <span>ATD: {voyage.atd}</span>
+            <span>ETA: {voyage.eta}</span>
+          </div>
+        </div>
+
+        {/* 3. Live Moving & Navigational Status Banner */}
         <div
           style={{
-            background:
-              vessel.status === "dark"
-                ? "rgba(244, 63, 94, 0.12)"
-                : vessel.status === "stale"
-                ? "rgba(245, 158, 11, 0.12)"
-                : "rgba(16, 185, 129, 0.12)",
-            border: `1px solid ${
-              vessel.status === "dark"
-                ? "var(--border-alert)"
-                : vessel.status === "stale"
-                ? "rgba(245, 158, 11, 0.4)"
-                : "rgba(16, 185, 129, 0.4)"
-            }`,
+            background: motion.isMoving ? "rgba(16, 185, 129, 0.08)" : "rgba(245, 158, 11, 0.08)",
+            border: `1px solid ${motion.isMoving ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`,
             borderRadius: "6px",
-            padding: "12px",
+            padding: "10px 12px",
             display: "flex",
             alignItems: "center",
-            gap: "10px",
+            justifyContent: "space-between",
           }}
         >
-          <ShieldAlert
-            size={24}
-            color={
-              vessel.status === "dark"
-                ? "var(--color-dark)"
-                : vessel.status === "stale"
-                ? "var(--color-stale)"
-                : "var(--color-active)"
-            }
-          />
-          <div>
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                fontFamily: "var(--font-mono)",
-                color:
-                  vessel.status === "dark"
-                    ? "var(--color-dark)"
-                    : vessel.status === "stale"
-                    ? "var(--color-stale)"
-                    : "var(--color-active)",
-              }}
-            >
-              STATUS: {vessel.status}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span className={`motion-beacon ${motion.statusClass}`} />
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: motion.color, fontFamily: "var(--font-mono)" }}>
+                NAV STATUS: {navStatus.toUpperCase()}
+              </div>
+              <div style={{ fontSize: "10px", color: "var(--silver-400)" }}>
+                {motion.isMoving
+                  ? `Vessel underway at ${Number(vessel.sog).toFixed(1)} kn along course ${Number(vessel.cog).toFixed(0)}°`
+                  : "Vessel stationary / moored in harbor or anchorage"}
+              </div>
             </div>
-            <div style={{ fontSize: "11px", color: "var(--silver-400)" }}>
-              {vessel.status === "dark"
-                ? "AIS broadcast halted while remaining at sea"
-                : "Normal reporting activity detected"}
-            </div>
+          </div>
+          <div style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>
+            <div style={{ color: "var(--silver-500)", fontSize: "10px", textTransform: "uppercase" }}>DRAUGHT</div>
+            <div style={{ fontWeight: 700, color: "var(--silver-100)", fontSize: "12px" }}>{voyage.draughtMeters} m</div>
           </div>
         </div>
 
@@ -270,10 +353,10 @@ export default function VesselDrawer({
 
           <div className="alert-card" style={{ padding: "10px" }}>
             <div style={{ fontSize: "10px", color: "var(--silver-500)", textTransform: "uppercase" }}>
-              Transceiver Class
+              Navigational Status
             </div>
-            <div style={{ fontSize: "18px", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--silver-100)" }}>
-              Class {vessel.transceiver_class || "A"}
+            <div style={{ fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--silver-100)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "4px" }} title={navStatus}>
+              {navStatus}
             </div>
           </div>
 
@@ -283,14 +366,14 @@ export default function VesselDrawer({
             </div>
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: 700,
                 fontFamily: "var(--font-mono)",
                 color: "var(--silver-100)",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
-                marginTop: "2px",
+                marginTop: "4px",
               }}
               title={vesselTypeName}
             >

@@ -90,11 +90,13 @@ def transform_aisstream_message(data: dict[str, Any]) -> dict[str, Any] | None:
     sog = msg_body.get("Sog")
     cog = msg_body.get("Cog")
     heading = msg_body.get("TrueHeading")
-    vessel_name = meta.get("ShipName", "").strip()
+    vessel_name = (msg_body.get("Name") or meta.get("ShipName", "")).strip()
+    vessel_type = msg_body.get("Type")
+    nav_status = msg_body.get("NavigationalStatus")
     time_utc = meta.get("time_utc", "")
 
     # Class A vs Class B
-    transceiver_class = "A" if msg_type == "PositionReport" else "B"
+    transceiver_class = "A" if msg_type in ("PositionReport", "ShipStaticData") else "B"
 
     return {
         "MMSI": int(mmsi),
@@ -105,8 +107,9 @@ def transform_aisstream_message(data: dict[str, Any]) -> dict[str, Any] | None:
         "COG": float(cog) if cog is not None else None,
         "Heading": float(heading) if heading is not None and heading != 511 else None,
         "VesselName": vessel_name,
-        "VesselType": None,
+        "VesselType": int(vessel_type) if vessel_type is not None else None,
         "TransceiverClass": transceiver_class,
+        "NavigationalStatus": int(nav_status) if nav_status is not None else None,
     }
 
 
@@ -141,6 +144,7 @@ async def stream_ais_live(args):
             "PositionReport",
             "StandardClassBPositionReport",
             "ExtendedClassBPositionReport",
+            "ShipStaticData",
         ],
     }
 
