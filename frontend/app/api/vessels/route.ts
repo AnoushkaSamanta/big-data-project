@@ -110,7 +110,7 @@ export async function GET() {
         status
       FROM vessel_latest_state
       ORDER BY last_seen DESC
-      LIMIT 10000;
+      LIMIT 60000;
     `);
 
     if (res.rows && res.rows.length > 0) {

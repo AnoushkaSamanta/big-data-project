@@ -221,36 +221,46 @@ export default function DeckMap({
       );
     }
 
-    // 3. Vessel Scatterplot Layer (High performance GPU rendering for 10k+ points)
+    // 3. Vessel Scatterplot Layer (High performance GPU rendering for 60k+ points)
     list.push(
       new ScatterplotLayer<VesselState>({
         id: "vessels-layer",
         data: vessels,
         pickable: true,
-        opacity: 0.95,
+        opacity: 0.9,
         stroked: true,
         filled: true,
         radiusScale: 6,
-        radiusMinPixels: 5,
-        radiusMaxPixels: 20,
-        lineWidthMinPixels: 2,
+        radiusMinPixels: 2.5,
+        radiusMaxPixels: 16,
+        lineWidthMinPixels: 1,
         getPosition: (d: VesselState) => [d.lon, d.lat],
         getRadius: (d: VesselState) => {
           if (selectedVessel && selectedVessel.mmsi === d.mmsi) return 140;
-          if (d.status === "dark") return 100;
-          return 60;
+          if (d.status === "dark") return 110;
+          return 50;
         },
         getFillColor: (d: VesselState) => {
-          if (d.status === "dark") return [239, 68, 68, 255]; // Crimson warning
-          if (d.status === "stale") return [245, 158, 11, 240]; // Amber
-          return [16, 185, 129, 230]; // Emerald active
+          if (d.status === "dark") return [239, 68, 68, 255]; // Crimson warning (Dark vessel)
+          if (d.status === "stale") return [245, 158, 11, 220]; // Amber (delayed ping)
+
+          // MarineTraffic-Style Maritime Category Color-Coding
+          const code = Number(d.vessel_type) || 70;
+          if (code >= 80 && code <= 89) return [239, 68, 68, 210]; // Red/Crimson: Tankers
+          if (code >= 70 && code <= 79) return [16, 185, 129, 210]; // Green: Cargo & Container
+          if (code === 30) return [249, 115, 22, 210];             // Orange: Fishing
+          if (code >= 60 && code <= 69) return [14, 165, 233, 210]; // Cyan/Blue: Passenger
+          if (code >= 40 && code <= 49) return [168, 85, 247, 210]; // Purple: High-Speed Craft
+          if (code === 52 || code === 31 || code === 32) return [148, 163, 184, 190]; // Slate: Tugs
+
+          return [16, 185, 129, 210]; // Default: Cargo Green
         },
         getLineColor: (d: VesselState) => {
           if (selectedVessel && selectedVessel.mmsi === d.mmsi) {
             return [255, 255, 255, 255];
           }
-          if (d.status === "dark") return [255, 200, 200, 255];
-          return [10, 20, 38, 220];
+          if (d.status === "dark") return [255, 220, 220, 255];
+          return [5, 10, 20, 180];
         },
         onHover: (info) => setHoverInfo(info),
         onClick: (info) => {
@@ -477,28 +487,36 @@ export default function DeckMap({
 
       {/* Map Legend */}
       <div className="map-legend">
-        <div style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.05em", color: "var(--silver-100)" }}>
-          SURVEILLANCE RADAR
+        <div style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.05em", color: "var(--silver-100)", marginBottom: "4px" }}>
+          GLOBAL FLEET RADAR
         </div>
         <div className="legend-item">
-          <div className="legend-swatch active" />
-          <span>Active Vessel (Normal AIS)</span>
+          <div className="legend-swatch" style={{ background: "#10b981" }} />
+          <span>Cargo &amp; Container Vessels</span>
         </div>
         <div className="legend-item">
-          <div className="legend-swatch stale" />
-          <span>Stale (Delayed broadcast)</span>
+          <div className="legend-swatch" style={{ background: "#ef4444" }} />
+          <span>Tankers (Crude Oil / Chemical)</span>
         </div>
         <div className="legend-item">
-          <div className="legend-swatch dark" />
+          <div className="legend-swatch" style={{ background: "#f97316" }} />
+          <span>Commercial Fishing</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-swatch" style={{ background: "#0ea5e9" }} />
+          <span>Passenger &amp; Ferries</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-swatch" style={{ background: "#a855f7" }} />
+          <span>High-Speed Craft (HSC)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-swatch dark" style={{ boxShadow: "0 0 8px #ef4444" }} />
           <span>Dark Vessel Anomaly (Gap &gt; p99)</span>
         </div>
         <div className="legend-item">
           <div className="legend-swatch" style={{ background: "rgba(239, 68, 68, 0.4)", border: "1px dashed #f87171" }} />
-          <span>Drift Uncertainty Search Zone</span>
-        </div>
-        <div className="legend-item">
-          <div className="legend-swatch geofence" />
-          <span>EEZ / Marine Protected Area</span>
+          <span>Drift Search Uncertainty Cone</span>
         </div>
       </div>
     </div>
