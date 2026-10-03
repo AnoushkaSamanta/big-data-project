@@ -115,7 +115,7 @@ function DocsContent() {
   // Find active item and category
   let activeCategoryTitle = "Getting Started";
   let activeItemLabel = "What is Dark Vessel Detection?";
-  let allItems: { id: string; label: string; category: string }[] = [];
+  const allItems: { id: string; label: string; category: string }[] = [];
 
   DOC_CATEGORIES.forEach((cat) => {
     cat.items.forEach((item) => {

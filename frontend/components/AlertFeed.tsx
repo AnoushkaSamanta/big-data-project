@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { AlertRecord } from "@/app/api/alerts/route";
 import { ShieldCheck, ChevronRight, Search, X } from "lucide-react";
 import { getVesselCountry } from "@/lib/mmsi";
@@ -29,6 +29,12 @@ export default function AlertFeed({
   const [filterSeverity, setFilterSeverity] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [searchMmsi, setSearchMmsi] = useState<string>("");
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const filtered = useMemo(() => {
     return alerts.filter((a) => {
@@ -146,7 +152,7 @@ export default function AlertFeed({
           {filtered.map((alert) => {
             const isSelected = selectedMmsi === alert.mmsi;
             const timeAgo = Math.round(
-              (Date.now() - new Date(alert.detected_at).getTime()) / 60000
+              (now - new Date(alert.detected_at).getTime()) / 60000
             );
             const country = getVesselCountry(alert.mmsi);
             const hasEvidence = Boolean(

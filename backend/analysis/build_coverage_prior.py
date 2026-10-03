@@ -21,10 +21,13 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
+from detection.rules import lat_lon_to_h3
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 # Default H3 resolution 5 (~252 km² hexagon area)
+# Balances terrestrial line-of-sight VHF coverage (~30-50 nm) with statistical sample size.
 DEFAULT_H3_RES = 5
 MIN_OBSERVATIONS = 500
 
@@ -41,17 +44,6 @@ def parse_args():
         default=os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais"),
     )
     return parser.parse_args()
-
-
-def lat_lon_to_h3(lat: float, lon: float, res: int) -> str:
-    """Convert coordinates to H3 hex index string."""
-    try:
-        # h3 v3 vs v4 compatibility
-        if hasattr(h3, "geo_to_h3"):
-            return h3.geo_to_h3(lat, lon, res)
-        return h3.latlng_to_cell(lat, lon, res)
-    except Exception:
-        return ""
 
 
 def build_coverage_prior_spark(args):

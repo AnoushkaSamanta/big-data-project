@@ -18,6 +18,8 @@ import websockets
 from confluent_kafka import Producer
 from dotenv import load_dotenv
 
+from data_pipeline.validate import parse_iso_timestamp
+
 # Load environment variables from .env
 load_dotenv()
 
@@ -60,10 +62,8 @@ def parse_args():
 def parse_aisstream_timestamp(time_utc_str: str) -> str:
     """Normalize AISStream time_utc (e.g. '2024-01-15 08:00:00.000 +0000 UTC') to ISO format."""
     try:
-        # Strip trailing ' +0000 UTC' if present
         clean_str = time_utc_str.replace(" +0000 UTC", "").strip()
-        dt = datetime.fromisoformat(clean_str)
-        return dt.replace(tzinfo=timezone.utc).isoformat()
+        return parse_iso_timestamp(clean_str).isoformat()
     except Exception:
         return datetime.now(timezone.utc).isoformat()
 

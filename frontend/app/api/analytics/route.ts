@@ -89,17 +89,54 @@ export async function GET() {
         LIMIT 15;
       `),
 
-      // 6. Alert timeline (hourly)
+      // 6. Alert timeline (adaptive granularity with continuous zero-filled slots)
       pool.query(`
+        WITH bounds AS (
+          SELECT 
+            COALESCE(min(detected_at), NOW() - INTERVAL '30 minutes') as raw_min_t,
+            COALESCE(max(detected_at), NOW()) as raw_max_t
+          FROM alerts
+          WHERE detected_at >= NOW() - INTERVAL '24 hours'
+        ),
+        params AS (
+          SELECT 
+            CASE 
+              WHEN raw_max_t - raw_min_t <= INTERVAL '2 hours' THEN LEAST(raw_min_t, raw_max_t - INTERVAL '20 minutes')
+              ELSE raw_min_t
+            END as start_t,
+            raw_max_t as end_t,
+            CASE 
+              WHEN raw_max_t - raw_min_t <= INTERVAL '2 hours' THEN '1 minute'::interval
+              WHEN raw_max_t - raw_min_t <= INTERVAL '12 hours' THEN '5 minutes'::interval
+              ELSE '1 hour'::interval
+            END as step_interval,
+            CASE 
+              WHEN raw_max_t - raw_min_t <= INTERVAL '24 hours' THEN 'HH24:MI'
+              ELSE 'MM-DD HH24:00'
+            END as time_fmt
+          FROM bounds
+        ),
+        slots AS (
+          SELECT generate_series(
+            date_trunc('minute', p.start_t),
+            date_trunc('minute', p.end_t),
+            p.step_interval
+          ) as slot_time,
+          p.step_interval,
+          p.time_fmt
+          FROM params p
+        )
         SELECT 
-          to_char(date_trunc('hour', detected_at), 'YYYY-MM-DD HH24:00') as bucket,
-          count(*) as count,
-          count(*) FILTER (WHERE alert_type = 'dark_vessel') as dark_count,
-          count(*) FILTER (WHERE alert_type = 'spoof') as spoof_count
-        FROM alerts
-        WHERE detected_at >= NOW() - INTERVAL '24 hours'
-        GROUP BY 1
-        ORDER BY 1 ASC;
+          to_char(s.slot_time, s.time_fmt) as bucket,
+          count(a.id)::int as count,
+          count(a.id) FILTER (WHERE a.alert_type = 'dark_vessel')::int as dark_count,
+          count(a.id) FILTER (WHERE a.alert_type = 'spoof')::int as spoof_count
+        FROM slots s
+        LEFT JOIN alerts a 
+          ON a.detected_at >= s.slot_time 
+         AND a.detected_at < s.slot_time + s.step_interval
+        GROUP BY s.slot_time, s.time_fmt
+        ORDER BY s.slot_time ASC;
       `),
 
       // 7. Coverage Prior statistics

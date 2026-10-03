@@ -1,18 +1,6 @@
 "use client";
 
-import React from "react";
-import {
-  Layers,
-  Cpu,
-  Radio,
-  Database,
-  BarChart3,
-  FileCode,
-  Satellite,
-  ChevronDown,
-  Sparkles,
-  ShieldAlert,
-} from "lucide-react";
+import { Cpu, Radio, ChevronDown } from "lucide-react";
 
 export interface DocCategory {
   title: string;

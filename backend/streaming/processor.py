@@ -7,14 +7,25 @@ unit testing of state transitions, watermarks, and in-stream anomaly rules.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
-from detection.rules import calculate_implied_speed_knots, haversine_km
+from data_pipeline.validate import parse_iso_timestamp
+from detection.rules import (
+    DEFAULT_SPEED_CEILING,
+    MAX_SPEED_BY_TYPE,
+    calculate_implied_speed_knots,
+    haversine_km,
+    lat_lon_to_h3,
+)
+
+# Alias for backward-compatibility with existing detector consumers
+MAX_SPEED_KNOTS_DEFAULT = DEFAULT_SPEED_CEILING
 
 
 @dataclass
 class VesselState:
+    """In-memory state tracker for a vessel across streaming partition windows."""
     mmsi: int
     last_seen: datetime
     last_lat: float
@@ -34,35 +45,15 @@ class VesselState:
 
 @dataclass
 class Alert:
+    """Structured evidence payload emitted when a detection rule or model fires."""
     mmsi: int
-    alert_type: str  # 'spoof', 'mmsi_collision', 'loiter', 'dark_vessel'
+    alert_type: str  # 'spoof', 'mmsi_collision', 'loiter', 'dark_vessel', 'rendezvous_sts'
     score: float
     severity: str  # 'low', 'medium', 'high'
     detected_at: datetime
     last_lat: float
     last_lon: float
     details: dict[str, Any] = field(default_factory=dict)
-
-
-# Maximum reasonable speeds by vessel type in knots
-# Cargo/tankers typically <= 25 kn; high-speed craft <= 55 kn.
-MAX_SPEED_KNOTS_DEFAULT = 60.0
-MAX_SPEED_BY_TYPE = {
-    70: 28.0,  # Cargo
-    80: 26.0,  # Tanker
-    60: 40.0,  # Passenger
-    30: 45.0,  # Fishing
-}
-
-
-def parse_iso_timestamp(ts_val: Any) -> datetime:
-    """Safely parse timestamp into timezone-aware datetime."""
-    if isinstance(ts_val, datetime):
-        return ts_val if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc)
-    # Handle ISO format string
-    cleaned = str(ts_val).replace("Z", "+00:00")
-    dt = datetime.fromisoformat(cleaned)
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def detect_in_stream_anomalies(
@@ -201,12 +192,9 @@ def process_batch(
         curr_state = state_table.get(mmsi)
         cell = r.get("cell")
         if not cell:
-            try:
-                import h3
-                cell = h3.geo_to_h3(lat, lon, 5) if hasattr(h3, "geo_to_h3") else h3.latlng_to_cell(lat, lon, 5)
+            cell = lat_lon_to_h3(lat, lon, 5) or None
+            if cell:
                 r["cell"] = cell
-            except Exception:
-                cell = None
 
         # 1. Run in-stream anomaly detection rules
         alerts = detect_in_stream_anomalies(r, curr_state)

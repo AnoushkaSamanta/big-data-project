@@ -1,8 +1,10 @@
-"""
-Unit tests for AIS record validation and sentinel normalization.
-"""
+from datetime import datetime, timezone
 
-from data_pipeline.validate import normalize_sentinels, validate_record
+from data_pipeline.validate import (
+    normalize_sentinels,
+    parse_iso_timestamp,
+    validate_record,
+)
 
 
 def test_valid_record():
@@ -61,3 +63,20 @@ def test_normalize_sentinels():
     assert cleaned["sog"] is None
     assert cleaned["cog"] is None
     assert cleaned["heading"] is None
+
+
+def test_parse_iso_timestamp():
+    # ISO string with trailing Z
+    dt1 = parse_iso_timestamp("2024-01-15T08:00:00Z")
+    assert dt1.year == 2024 and dt1.month == 1 and dt1.day == 15
+    assert dt1.tzinfo == timezone.utc
+
+    # ISO string with +00:00 offset
+    dt2 = parse_iso_timestamp("2024-01-15T08:00:00+00:00")
+    assert dt2 == dt1
+
+    # Native datetime object without timezone (assigned UTC by parser)
+    naive = datetime(2024, 1, 15, 8, 0, 0)  # noqa: DTZ001
+    dt3 = parse_iso_timestamp(naive)
+    assert dt3 == dt1
+

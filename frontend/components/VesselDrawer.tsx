@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import { VesselState } from "@/app/api/vessels/route";
-import { X, Navigation, ShieldAlert, Download, Radar, Camera, ExternalLink, Ship, Globe } from "lucide-react";
+import { X, ShieldAlert, Download, Radar, Camera, ExternalLink, Ship, Globe } from "lucide-react";
 import { computeDriftCone } from "@/lib/drift";
 import {
   getVesselCountry,
@@ -31,10 +31,7 @@ export default function VesselDrawer({
   const [resolvedName, setResolvedName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!vessel) return;
-    setRealPhoto(null);
-    setIsRealPhoto(false);
-    setResolvedName(null);
+    if (!vessel?.mmsi) return;
 
     let isMounted = true;
     fetch(`/api/vessels/${vessel.mmsi}/photo`)
@@ -53,8 +50,24 @@ export default function VesselDrawer({
 
     return () => {
       isMounted = false;
+      setRealPhoto(null);
+      setIsRealPhoto(false);
+      setResolvedName(null);
     };
-  }, [vessel?.mmsi]);
+  }, [vessel?.mmsi, vessel?.vessel_name]);
+
+  // Compute tactical dead-reckoning search zone if vessel is dark (Hook must always run)
+  const driftZone = useMemo(() => {
+    if (!vessel || vessel.status !== "dark") return null;
+    return computeDriftCone(
+      vessel.mmsi,
+      vessel.lat,
+      vessel.lon,
+      vessel.sog,
+      vessel.cog,
+      vessel.last_seen
+    );
+  }, [vessel]);
 
   if (!vessel) return null;
 
@@ -66,19 +79,6 @@ export default function VesselDrawer({
   const voyage = getVoyageDetails(vessel.mmsi, vessel.vessel_type, vessel.last_seen);
   const activeName = vessel.vessel_name || resolvedName || `VESSEL ${vessel.mmsi}`;
   const activePhotoUrl = realPhoto || photo.url;
-
-  // Compute tactical dead-reckoning search zone if vessel is dark
-  const driftZone = useMemo(() => {
-    if (vessel.status !== "dark") return null;
-    return computeDriftCone(
-      vessel.mmsi,
-      vessel.lat,
-      vessel.lon,
-      vessel.sog,
-      vessel.cog,
-      vessel.last_seen
-    );
-  }, [vessel]);
 
   // Handle Exporting Evidence Dossier as downloadable GeoJSON
   const handleExportDossier = () => {

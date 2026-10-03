@@ -6,10 +6,11 @@ this contract before downstream processing. Normalizing sentinel values and
 rejecting invalid records here prevents corrupting spatial math and false alerts.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 
 # AIS Standard Sentinel Values (ITU-R M.1371)
-# When transponders have no valid sensor data, they broadcast standard sentinels.
+# When transponders lack valid sensor telemetry, they emit specification sentinels:
 SENTINEL_SOG = 102.3       # Speed over ground: 102.3 = not available
 SENTINEL_COG = 360.0       # Course over ground: 360.0 = not available
 SENTINEL_HEADING = 511.0   # True heading: 511 = not available
@@ -17,13 +18,25 @@ SENTINEL_LAT = 91.0        # Latitude: 91.0 = default / unassigned
 SENTINEL_LON = 181.0       # Longitude: 181.0 = default / unassigned
 
 
+def parse_iso_timestamp(ts_val: Any) -> datetime:
+    """
+    Safely parse an ISO-8601 timestamp string or datetime object into a UTC timezone-aware datetime.
+    Replaces trailing 'Z' with '+00:00' to maintain compatibility across Python datetime parsers.
+    """
+    if isinstance(ts_val, datetime):
+        return ts_val if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc)
+    cleaned = str(ts_val).replace("Z", "+00:00").strip()
+    dt = datetime.fromisoformat(cleaned)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def validate_record(r: dict[str, Any]) -> tuple[bool, str | None]:
     """
-    Validate an incoming AIS record against contract rules.
+    Validate an incoming AIS record against contract rules before downstream consumption.
 
     Returns:
         (True, None) if valid.
-        (False, reason_code) if rejected (destined for DLQ).
+        (False, reason_code) if rejected (destined for Dead-Letter Queue).
     """
     # 1. MMSI Validation: Must be 9-digit positive integer
     mmsi = r.get("MMSI") or r.get("mmsi")
@@ -34,6 +47,10 @@ def validate_record(r: dict[str, Any]) -> tuple[bool, str | None]:
     ts = r.get("BaseDateTime") or r.get("ts")
     if not ts:
         return False, "missing_timestamp"
+    try:
+        parse_iso_timestamp(ts)
+    except (ValueError, TypeError):
+        return False, "malformed_timestamp"
 
     # 3. Position Availability & Range
     lat = r.get("LAT") if "LAT" in r else r.get("lat")

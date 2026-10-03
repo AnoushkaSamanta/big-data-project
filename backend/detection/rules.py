@@ -12,16 +12,42 @@ import math
 from datetime import datetime
 from typing import Any
 
+try:
+    import h3
+except ImportError:
+    h3 = None
+
+# WGS-84 volumetric mean earth radius in kilometers
 EARTH_RADIUS_KM = 6371.0088
 
-# Standard speed ceilings by vessel type (knots)
-MAX_SPEED_BY_TYPE = {
-    70: 28.0,  # Cargo
-    80: 26.0,  # Tanker
-    60: 40.0,  # Passenger
-    30: 45.0,  # Fishing
+# Nautical speed thresholds by vessel category (ITU / Marine Cadastre specifications)
+# Speeds exceeding 2x these baselines are kinematically impossible for conventional hulls.
+DEFAULT_SPEED_CEILING = 60.0  # knots: extreme upper bound (fast ferries/interceptors)
+MAX_SPEED_BY_TYPE: dict[int, float] = {
+    70: 28.0,  # Cargo vessels: typical service speed 16-24 kn
+    80: 26.0,  # Tankers (crude/chemical): typical service speed 13-17 kn
+    60: 40.0,  # Passenger/Ro-Pax: up to 35-40 kn
+    30: 45.0,  # Fishing vessels: up to 25-35 kn
 }
-DEFAULT_SPEED_CEILING = 60.0
+
+
+def lat_lon_to_h3(lat: float, lon: float, res: int = 5) -> str:
+    """
+    Convert a WGS-84 coordinate to an H3 hexagonal cell index string.
+    Supports both h3 v3 (geo_to_h3) and v4 (latlng_to_cell) API contracts.
+    Returns empty string if coordinates are out of bounds or h3 is uninstalled.
+    """
+    if h3 is None:
+        return ""
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+        return ""
+    try:
+        if hasattr(h3, "geo_to_h3"):
+            return h3.geo_to_h3(lat, lon, res)
+        return h3.latlng_to_cell(lat, lon, res)
+    except Exception:
+        return ""
+
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

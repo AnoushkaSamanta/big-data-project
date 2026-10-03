@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Search, X, FileText, ArrowRight, Hash } from "lucide-react";
-import { DOC_CATEGORIES } from "./DocsSidebar";
+import { Search, X, ArrowRight } from "lucide-react";
 
 interface SearchResult {
   id: string;
@@ -181,9 +180,12 @@ export default function DocsSearchModal({
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-      setQuery("");
-      setSelectedIndex(0);
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+        setQuery("");
+        setSelectedIndex(0);
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 

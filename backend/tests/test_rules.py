@@ -10,6 +10,7 @@ from detection.rules import (
     is_loitering,
     is_mmsi_collision,
     is_rendezvous,
+    lat_lon_to_h3,
 )
 
 
@@ -124,3 +125,14 @@ def test_calculate_dead_reckoning_cone():
     # Projected latitude should remain ~37.8, projected longitude should be further west (more negative)
     assert cone["properties"]["projected_lon"] < -122.4
     assert cone["properties"]["distance_km"] > 40.0
+
+
+def test_lat_lon_to_h3():
+    # San Francisco Bay coordinates
+    cell = lat_lon_to_h3(37.8, -122.4, res=5)
+    assert isinstance(cell, str)
+    assert len(cell) > 5
+
+    # Invalid coordinates handling
+    invalid_cell = lat_lon_to_h3(999.0, 999.0, res=5)
+    assert invalid_cell == ""

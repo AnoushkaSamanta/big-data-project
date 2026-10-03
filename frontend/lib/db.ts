@@ -2,7 +2,6 @@ import { Pool } from "pg";
 
 // Create a singleton connection pool to PostgreSQL / PostGIS
 declare global {
-  // eslint-disable-next-line no-var
   var _pgPool: Pool | undefined;
 }
 
@@ -30,7 +29,7 @@ if (process.env.NODE_ENV === "production") {
 
 export default pool;
 
-export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
+export async function query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> {
   const client = await pool.connect();
   try {
     const res = await client.query(text, params);
@@ -39,3 +38,4 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
     client.release();
   }
 }
+

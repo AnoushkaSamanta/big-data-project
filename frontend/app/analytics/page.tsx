@@ -147,12 +147,22 @@ export default function AnalyticsDashboardPage() {
   // 1. Time Series Anomaly Velocity Area Chart
   const timelineOption = useMemo<echarts.EChartsOption>(() => {
     const timeline = data?.anomalies?.timeline || [];
-    const labels = timeline.map((p) => {
+    const rawLabels = timeline.map((p) => {
       const parts = p.bucket.split(" ");
       return parts.length > 1 ? parts[1] : p.bucket;
     });
-    const darkData = timeline.map((p) => p.dark_count);
-    const spoofData = timeline.map((p) => p.spoof_count);
+    const rawDark = timeline.map((p) => p.dark_count);
+    const rawSpoof = timeline.map((p) => p.spoof_count);
+
+    let labels = rawLabels;
+    let darkData = rawDark;
+    let spoofData = rawSpoof;
+
+    if (rawLabels.length === 1) {
+      labels = ["--:--", rawLabels[0]];
+      darkData = [0, rawDark[0]];
+      spoofData = [0, rawSpoof[0]];
+    }
 
     return {
       backgroundColor: "transparent",
@@ -201,34 +211,34 @@ export default function AnalyticsDashboardPage() {
         {
           name: "Dark Vessel Gaps (> p99)",
           type: "line",
-          smooth: true,
-          showSymbol: true,
-          symbolSize: 6,
+          smooth: 0.35,
+          showSymbol: labels.length < 15,
+          symbolSize: 5,
           itemStyle: { color: "#ef4444" },
           lineStyle: { width: 2.5, color: "#ef4444", shadowColor: "rgba(239, 68, 68, 0.5)", shadowBlur: 8 },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(239, 68, 68, 0.35)" },
+              { offset: 0, color: "rgba(239, 68, 68, 0.38)" },
               { offset: 1, color: "rgba(239, 68, 68, 0.00)" },
             ]),
           },
-          data: darkData.length > 0 ? darkData : [12, 18, 9, 24, 15, 30],
+          data: darkData.length > 0 ? darkData : [0, 0],
         },
         {
           name: "Kinematic Spoofing / Jumps",
           type: "line",
-          smooth: true,
-          showSymbol: true,
-          symbolSize: 6,
+          smooth: 0.35,
+          showSymbol: labels.length < 15,
+          symbolSize: 5,
           itemStyle: { color: "#f59e0b" },
           lineStyle: { width: 2.5, color: "#f59e0b", shadowColor: "rgba(245, 158, 11, 0.5)", shadowBlur: 8 },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(245, 158, 11, 0.35)" },
+              { offset: 0, color: "rgba(245, 158, 11, 0.38)" },
               { offset: 1, color: "rgba(245, 158, 11, 0.00)" },
             ]),
           },
-          data: spoofData.length > 0 ? spoofData : [5, 12, 15, 8, 22, 14],
+          data: spoofData.length > 0 ? spoofData : [0, 0],
         },
       ],
     };

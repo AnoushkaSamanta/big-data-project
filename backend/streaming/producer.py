@@ -19,6 +19,8 @@ from typing import Any
 
 from confluent_kafka import Producer
 
+from data_pipeline.validate import parse_iso_timestamp
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -99,7 +101,7 @@ def run_producer(args):
         return
 
     # 2. Sort chronologically by event timestamp
-    records.sort(key=lambda r: datetime.fromisoformat(r["BaseDateTime"].replace("Z", "+00:00")))
+    records.sort(key=lambda r: parse_iso_timestamp(r["BaseDateTime"]))
     logger.info(f"Loaded {len(records)} records. Replaying...")
 
     # 3. Stream loop with out-of-order delay buffer
@@ -111,7 +113,7 @@ def run_producer(args):
     total_delayed = 0
 
     for r in records:
-        curr_event_ts = datetime.fromisoformat(r["BaseDateTime"].replace("Z", "+00:00"))
+        curr_event_ts = parse_iso_timestamp(r["BaseDateTime"])
 
         # Wall-clock pacing
         if prev_event_ts is not None and args.speedup > 0:

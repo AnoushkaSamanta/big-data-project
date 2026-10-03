@@ -39,7 +39,7 @@ export default function HudStats({
         <div className="hud-meta">
           <span className="hud-label">Dark Vessel Alerts</span>
           <span className="hud-value" style={{ color: darkVessels > 0 ? "var(--color-dark)" : "var(--silver-100)" }}>
-            {darkVessels}
+            {darkVessels} {alerts24h > 0 ? <small style={{ fontSize: "11px", color: "var(--silver-400)" }}>({alerts24h} 24h)</small> : null}
           </span>
         </div>
       </div>

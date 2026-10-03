@@ -14,11 +14,10 @@ interface DocsTocProps {
 }
 
 export default function DocsToc({ headings }: DocsTocProps) {
-  const [activeId, setActiveId] = useState<string>("");
+  const [activeId, setActiveId] = useState<string>(() => headings[0]?.id || "");
 
   useEffect(() => {
     if (headings.length === 0) return;
-    setActiveId(headings[0].id);
 
     const observer = new IntersectionObserver(
       (entries) => {

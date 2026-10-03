@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldAlert, Radio, Activity, RefreshCw, Radar, BookOpen, BarChart3 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 interface HeaderProps {
   onRefresh?: () => void;
@@ -24,7 +24,7 @@ export default function Header({
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setTimeStr(now.toISOString().replace("T", " ").substring(0, 19) + " UTC");
+      setTimeStr(now.toISOString().substring(11, 19) + " UTC");
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -33,74 +33,90 @@ export default function Header({
 
   return (
     <header className="tactical-header">
-      <div className="brand-section">
-        <span className="brand-badge">MDA SEC-04</span>
-        <div className="brand-title">
-          <ShieldAlert size={20} color="#e2e8f0" />
-          <span>DARK VESSEL DETECTION</span>
-          <span className="brand-subtitle">// LIVE INTELLIGENCE</span>
-        </div>
-
-        {/* Primary Navigation */}
-        <nav className="header-nav">
-          <Link
-            href="/"
-            className={`nav-link-btn ${pathname === "/" ? "active" : ""}`}
-          >
-            <Radar size={14} />
-            <span>RADAR CONSOLE</span>
-          </Link>
-
-          <Link
-            href="/analytics"
-            className={`nav-link-btn ${pathname.startsWith("/analytics") ? "active" : ""}`}
-          >
-            <BarChart3 size={14} />
-            <span>ANALYTICS DASHBOARD</span>
-          </Link>
-
-          <Link
-            href="/docs"
-            className={`nav-link-btn ${pathname.startsWith("/docs") || pathname === "/architecture" ? "active" : ""}`}
-          >
-            <BookOpen size={14} />
-            <span>DOCS & ARCHITECTURE</span>
-          </Link>
-        </nav>
+      {/* Brand Identity */}
+      <div className="header-brand-zone">
+        <Link href="/" className="brand-lockup">
+          <span className="brand-dot" />
+          <span className="brand-title-text">
+            DARK <span className="brand-dim">VESSEL</span>
+          </span>
+        </Link>
       </div>
 
-      <div className="header-status-group">
-        <div className="status-pill">
-          <span className={`pulse-dot ${darkCount > 0 ? "alert" : ""}`} />
-          <span>
-            {darkCount > 0
-              ? `${darkCount} ANOMALIES ACTIVE`
-              : "RADAR SURVEILLANCE OK"}
-          </span>
+      {/* Clean Flat Navigation (No pill shape, clean bottom underline on active) */}
+      <nav className="header-nav-flat" aria-label="Main Navigation">
+        <Link
+          href="/"
+          className={`nav-flat-link ${pathname === "/" ? "active" : ""}`}
+        >
+          Radar Console
+        </Link>
+
+        <Link
+          href="/analytics"
+          className={`nav-flat-link ${pathname.startsWith("/analytics") ? "active" : ""}`}
+        >
+          Analytics
+        </Link>
+
+        <Link
+          href="/docs"
+          className={`nav-flat-link ${pathname.startsWith("/docs") || pathname === "/architecture" ? "active" : ""}`}
+        >
+          Docs & Architecture
+        </Link>
+      </nav>
+
+      {/* Clean Inline Telemetry (No pill badges, no blinking animations) */}
+      <div className="header-telemetry-zone">
+        <div className="telemetry-item">
+          <span className="static-dot green" />
+          <span className="telemetry-text">Kafka Live</span>
         </div>
 
-        <div className="status-pill">
-          <Radio size={14} color="#10b981" />
-          <span>KAFKA: LIVE</span>
-        </div>
+        <div className="telemetry-divider" />
 
-        <div className="status-pill">
-          <Activity size={14} color="#cbd5e1" />
-          <span>{timeStr || "SYNCING..."}</span>
+        {darkCount > 0 ? (
+          <div className="telemetry-item alert">
+            <span className="static-dot red" />
+            <span className="telemetry-value text-red">{darkCount}</span>
+            <span className="telemetry-label">Anomalies</span>
+          </div>
+        ) : (
+          <div className="telemetry-item nominal">
+            <span className="static-dot green" />
+            <span className="telemetry-text">Nominal</span>
+          </div>
+        )}
+
+        {activeCount > 0 && (
+          <>
+            <div className="telemetry-divider" />
+            <div className="telemetry-item">
+              <span className="telemetry-value">{activeCount.toLocaleString()}</span>
+              <span className="telemetry-label">Tracked</span>
+            </div>
+          </>
+        )}
+
+        <div className="telemetry-divider" />
+
+        <div className="telemetry-item clock">
+          <span className="telemetry-text mono">{timeStr || "SYNCING..."}</span>
         </div>
 
         {onRefresh && (
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="toggle-btn"
+            className="header-refresh-btn"
             title="Force refresh database snapshot"
+            aria-label="Refresh surveillance data"
           >
             <RefreshCw
               size={13}
               className={isRefreshing ? "animate-spin" : ""}
             />
-            <span>REFRESH</span>
           </button>
         )}
       </div>
