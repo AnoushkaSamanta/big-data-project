@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 
 export interface VesselState {
@@ -91,9 +91,56 @@ const SAMPLE_VESSELS: VesselState[] = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const minLonStr = searchParams.get("minLon");
+  const minLatStr = searchParams.get("minLat");
+  const maxLonStr = searchParams.get("maxLon");
+  const maxLatStr = searchParams.get("maxLat");
+  const sinceStr = searchParams.get("since");
+  const limitParam = parseInt(searchParams.get("limit") || "2500", 10);
+  const limit = Math.min(Math.max(1, isNaN(limitParam) ? 2500 : limitParam), 10000);
+
+  const serverTime = new Date().toISOString();
+
   try {
-    const res = await pool.query(`
+    const conditions: string[] = [];
+    const values: any[] = [];
+
+    // 1. Delta filter (records updated after 'since')
+    if (sinceStr) {
+      const sinceDate = new Date(sinceStr);
+      if (!isNaN(sinceDate.getTime())) {
+        values.push(sinceDate.toISOString());
+        conditions.push(`last_seen > $${values.length}`);
+      }
+    }
+
+    // 2. Spatial bounding box filter (using GIST spatial index on last_geom)
+    if (minLonStr && minLatStr && maxLonStr && maxLatStr) {
+      const minLon = parseFloat(minLonStr);
+      const minLat = parseFloat(minLatStr);
+      const maxLon = parseFloat(maxLonStr);
+      const maxLat = parseFloat(maxLatStr);
+
+      if (
+        !isNaN(minLon) &&
+        !isNaN(minLat) &&
+        !isNaN(maxLon) &&
+        !isNaN(maxLat) &&
+        minLat >= -90 &&
+        maxLat <= 90
+      ) {
+        values.push(minLon, minLat, maxLon, maxLat);
+        const idx = values.length - 3;
+        // Include any vessel within bounding envelope OR any dark vessel anywhere
+        conditions.push(
+          `(last_geom && ST_MakeEnvelope($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, 4326) OR status = 'dark')`
+        );
+      }
+    }
+
+    let queryText = `
       SELECT 
         mmsi,
         vessel_name,
@@ -109,28 +156,57 @@ export async function GET() {
         msg_count,
         status
       FROM vessel_latest_state
-      ORDER BY last_seen DESC
-      LIMIT 60000;
-    `);
+    `;
+
+    if (conditions.length > 0) {
+      queryText += ` WHERE ` + conditions.join(" AND ");
+    }
+
+    // Prioritize high-threat/dark vessels first, then most recently observed
+    queryText += `
+      ORDER BY 
+        CASE WHEN status = 'dark' THEN 0 WHEN status = 'stale' THEN 1 ELSE 2 END,
+        last_seen DESC
+      LIMIT $${values.length + 1};
+    `;
+    values.push(limit);
+
+    const res = await pool.query(queryText, values);
 
     if (res.rows && res.rows.length > 0) {
       return NextResponse.json({
         source: "database",
+        server_time: serverTime,
+        is_delta: Boolean(sinceStr),
         count: res.rows.length,
         vessels: res.rows,
+      });
+    }
+
+    // If this was a delta poll with 0 new updates, return empty delta array rather than mock
+    if (sinceStr) {
+      return NextResponse.json({
+        source: "database",
+        server_time: serverTime,
+        is_delta: true,
+        count: 0,
+        vessels: [],
       });
     }
 
     // Return sample demonstration data if DB is empty
     return NextResponse.json({
       source: "mock",
+      server_time: serverTime,
+      is_delta: false,
       count: SAMPLE_VESSELS.length,
       vessels: SAMPLE_VESSELS,
     });
   } catch (err: any) {
-    // Graceful fallback to mock data on DB connection error
     return NextResponse.json({
       source: "mock (db offline)",
+      server_time: serverTime,
+      is_delta: false,
       count: SAMPLE_VESSELS.length,
       vessels: SAMPLE_VESSELS,
       error: err.message,

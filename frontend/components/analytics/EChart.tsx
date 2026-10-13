@@ -33,9 +33,9 @@ export default function EChart({
     if (loading) {
       chart.showLoading({
         text: "ANALYZING TELEMETRY...",
-        color: "#38bdf8",
+        color: "#f26522",
         textColor: "#94a3b8",
-        maskColor: "rgba(7, 8, 11, 0.6)",
+        maskColor: "rgba(7, 9, 14, 0.7)",
       });
     } else {
       chart.hideLoading();

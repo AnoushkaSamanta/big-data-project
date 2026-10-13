@@ -16,7 +16,7 @@ flowchart TB
     subgraph BATCH["Batch Layer (Offline Spark)"]
         CLEAN["load_historical.py<br/>CSV → Parquet"]
         PRIOR["build_coverage_prior.py<br/>H3 Percentile Aggregation"]
-        TRAIN["train.py<br/>IsolationForest Trajectory Model"]
+        TRAIN["train.py<br/>Spark MLlib Trajectory Model"]
     end
 
     subgraph SPEED["Speed Layer (Live Streaming)"]

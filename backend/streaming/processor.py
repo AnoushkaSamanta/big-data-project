@@ -16,6 +16,7 @@ from detection.rules import (
     MAX_SPEED_BY_TYPE,
     calculate_implied_speed_knots,
     haversine_km,
+    is_loitering,
     lat_lon_to_h3,
 )
 
@@ -72,40 +73,39 @@ def detect_in_stream_anomalies(
     curr_ts = parse_iso_timestamp(record["BaseDateTime"])
     curr_lat = float(record["LAT"])
     curr_lon = float(record["LON"])
+    sog = float(record.get("sog") or record.get("SOG") or 0.0)
     vessel_type = record.get("VesselType") or curr_state.vessel_type
     speed_ceiling = MAX_SPEED_BY_TYPE.get(vessel_type, MAX_SPEED_KNOTS_DEFAULT)
 
     # Calculate time delta to previous ping
     dt_seconds = (curr_ts - curr_state.last_seen).total_seconds()
+    dist_km = haversine_km(curr_state.last_lat, curr_state.last_lon, curr_lat, curr_lon)
 
-    # Out-of-order or duplicate timestamp check
-    if dt_seconds <= 0:
-        # If timestamps match or are within 1s but coordinates are > 100 km apart, MMSI collision!
-        dist_km = haversine_km(curr_state.last_lat, curr_state.last_lon, curr_lat, curr_lon)
-        if dist_km > 50.0:
-            alerts.append(
-                Alert(
-                    mmsi=curr_state.mmsi,
-                    alert_type="mmsi_collision",
-                    score=min(10.0, dist_km / 50.0),
-                    severity="high",
-                    detected_at=curr_ts,
-                    last_lat=curr_lat,
-                    last_lon=curr_lon,
-                    details={
-                        "reason": "simultaneous_distant_transmissions",
-                        "distance_km": round(dist_km, 1),
-                        "dt_seconds": dt_seconds,
-                    },
-                )
+    # 1. MMSI Collision / Identity Cloning check:
+    # Same MMSI received with identical/simultaneous/out-of-order timestamp (dt <= 0) >= 50 km apart.
+    if dt_seconds <= 0 and dist_km >= 50.0:
+        alerts.append(
+            Alert(
+                mmsi=curr_state.mmsi,
+                alert_type="mmsi_collision",
+                score=min(10.0, round(dist_km / 50.0, 2)),
+                severity="high",
+                detected_at=curr_ts,
+                last_lat=curr_lat,
+                last_lon=curr_lon,
+                details={
+                    "reason": "simultaneous_distant_transmissions",
+                    "distance_km": round(dist_km, 1),
+                    "dt_seconds": round(dt_seconds, 1),
+                },
             )
+        )
         return alerts
 
-    dist_km = haversine_km(curr_state.last_lat, curr_state.last_lon, curr_lat, curr_lon)
     implied_speed = calculate_implied_speed_knots(dist_km, dt_seconds)
 
-    # 1. Check for Jump-and-Return Spoofing
-    # A vessel jumps to a distant coordinate (> 50 km) at impossible speed,
+    # 2. Check for Jump-and-Return Spoofing
+    # A vessel jumps to a distant coordinate (> 20 km) at impossible speed,
     # then in the next ping jumps back to near its original trajectory.
     if len(curr_state.recent_pings) >= 2:
         t_prev2, lat_prev2, lon_prev2 = curr_state.recent_pings[-2]
@@ -113,9 +113,13 @@ def detect_in_stream_anomalies(
         total_dt = (curr_ts - t_prev2).total_seconds()
         speed_across_2 = calculate_implied_speed_knots(dist_back_to_orig, total_dt)
 
-        # If it returned to the expected trajectory (speed_across_2 is normal)
-        # while the intermediate ping was an extreme outlier:
-        if speed_across_2 <= speed_ceiling and implied_speed > speed_ceiling * 2.0:
+        dist_out = haversine_km(lat_prev2, lon_prev2, curr_state.last_lat, curr_state.last_lon)
+        if (
+            dist_km >= 20.0
+            and dist_out >= 20.0
+            and speed_across_2 <= speed_ceiling
+            and implied_speed > speed_ceiling * 2.0
+        ):
             alerts.append(
                 Alert(
                     mmsi=curr_state.mmsi,
@@ -135,7 +139,7 @@ def detect_in_stream_anomalies(
             )
             return alerts
 
-    # 2. Extreme Implied Speed Alert
+    # 3. Extreme Implied Speed Alert
     if implied_speed > speed_ceiling:
         severity = "high" if implied_speed > speed_ceiling * 2.0 else "medium"
         alerts.append(
@@ -153,6 +157,30 @@ def detect_in_stream_anomalies(
                     "speed_ceiling_knots": speed_ceiling,
                     "dist_km": round(dist_km, 1),
                     "dt_seconds": round(dt_seconds, 1),
+                },
+            )
+        )
+        return alerts
+
+    # 4. Loitering Detection
+    # If vessel maintains slow speed (<= 2.0 kn) in a tight radius (<= 3 km) over >= 30 mins
+    candidate_pings = curr_state.recent_pings + [(curr_ts, curr_lat, curr_lon)]
+    if len(candidate_pings) >= 5 and is_loitering(candidate_pings, min_duration_hours=0.5, max_radius_km=3.0, max_avg_speed_knots=2.0):
+        t_span_h = (candidate_pings[-1][0] - candidate_pings[0][0]).total_seconds() / 3600.0
+        alerts.append(
+            Alert(
+                mmsi=curr_state.mmsi,
+                alert_type="loiter",
+                score=round(max(1.0, 3.0 - (sog or 1.0)), 2),
+                severity="medium",
+                detected_at=curr_ts,
+                last_lat=curr_lat,
+                last_lon=curr_lon,
+                details={
+                    "reason": "lingering_at_slow_speed",
+                    "duration_hours": round(t_span_h, 2),
+                    "pings_count": len(candidate_pings),
+                    "last_sog": sog,
                 },
             )
         )
@@ -234,9 +262,9 @@ def process_batch(
                 curr_state.msg_count += 1
                 curr_state.status = "active"
 
-                # Update recent ping buffer (keep max 5 pings)
+                # Update recent ping buffer (keep max 10 pings)
                 curr_state.recent_pings.append((ts, lat, lon))
-                if len(curr_state.recent_pings) > 5:
+                if len(curr_state.recent_pings) > 10:
                     curr_state.recent_pings.pop(0)
 
         state_table[mmsi] = curr_state

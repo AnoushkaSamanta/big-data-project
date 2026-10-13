@@ -81,10 +81,13 @@ export function computeDriftCone(
   steps: number = 20
 ): DriftConeFeature {
   const lastSeenMs = new Date(lastSeenIso).getTime();
-  const elapsedHours = Math.max(0.05, (Date.now() - lastSeenMs) / 3600000);
+  const rawElapsed = Math.max(0.05, (Date.now() - lastSeenMs) / 3600000);
+  // Cap elapsed time to tactical operational window (max 6 hours, max 75 km)
+  // to avoid planetary-scale cone distortions when timestamps are historical
+  const elapsedHours = Math.min(6.0, rawElapsed);
   const speed = Math.max(0.5, sogKnots !== null && sogKnots !== undefined ? Number(sogKnots) : 0.5);
   const cog = cogDegrees !== null && cogDegrees !== undefined ? Number(cogDegrees) : 0;
-  const distKm = Math.max(1.0, speed * 1.852 * elapsedHours);
+  const distKm = Math.min(75.0, Math.max(1.0, speed * 1.852 * elapsedHours));
 
   const ring: [number, number][] = [];
 

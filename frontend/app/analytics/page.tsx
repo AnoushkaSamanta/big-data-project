@@ -168,14 +168,14 @@ export default function AnalyticsDashboardPage() {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
-        backgroundColor: "rgba(9, 12, 18, 0.95)",
-        borderColor: "rgba(226, 232, 240, 0.2)",
+        backgroundColor: "rgba(13, 19, 31, 0.96)",
+        borderColor: "rgba(51, 65, 85, 0.5)",
         borderWidth: 1,
         textStyle: { color: "#f8fafc", fontSize: 11, fontFamily: "monospace" },
         axisPointer: {
           type: "cross",
-          lineStyle: { color: "rgba(56, 189, 248, 0.5)", width: 1, type: "dashed" },
-          crossStyle: { color: "rgba(56, 189, 248, 0.5)" },
+          lineStyle: { color: "rgba(242, 101, 34, 0.6)", width: 1, type: "dashed" },
+          crossStyle: { color: "rgba(242, 101, 34, 0.6)" },
         },
       },
       legend: {
@@ -253,11 +253,11 @@ export default function AnalyticsDashboardPage() {
       "Cargo & Containers": "#10b981",
       "Tankers (Crude/Chemical)": "#ef4444",
       "Commercial Fishing": "#f97316",
-      "Passenger & Ferries": "#0ea5e9",
+      "Passenger & Ferries": "#f26522",
       "High-Speed Craft": "#a855f7",
       "Tug & Special Service": "#64748b",
       "Unspecified / General Fleet": "#475569",
-      "Other Craft": "#38bdf8",
+      "Other Craft": "#fb923c",
     };
 
     const pieData = categories.map((c) => ({
@@ -270,8 +270,8 @@ export default function AnalyticsDashboardPage() {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
-        backgroundColor: "rgba(9, 12, 18, 0.95)",
-        borderColor: "rgba(226, 232, 240, 0.2)",
+        backgroundColor: "rgba(13, 19, 31, 0.96)",
+        borderColor: "rgba(51, 65, 85, 0.5)",
         borderWidth: 1,
         textStyle: { color: "#f8fafc", fontSize: 11, fontFamily: "monospace" },
         formatter: "{b}: <strong>{c}</strong> vessels ({d}%)",
@@ -286,7 +286,7 @@ export default function AnalyticsDashboardPage() {
         itemWidth: 10,
         itemHeight: 10,
         pageTextStyle: { color: "#94a3b8" },
-        pageIconColor: "#38bdf8",
+        pageIconColor: "#f26522",
       },
       series: [
         {
@@ -433,8 +433,8 @@ export default function AnalyticsDashboardPage() {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
-        backgroundColor: "rgba(9, 12, 18, 0.95)",
-        borderColor: "rgba(226, 232, 240, 0.2)",
+        backgroundColor: "rgba(13, 19, 31, 0.96)",
+        borderColor: "rgba(51, 65, 85, 0.5)",
         textStyle: { color: "#f8fafc", fontSize: 11, fontFamily: "monospace" },
         formatter: (params: any) => {
           const item = params[0];
@@ -564,7 +564,7 @@ export default function AnalyticsDashboardPage() {
                           )
                         : 60
                     }%`,
-                    background: "#38bdf8",
+                    background: "#f26522",
                   }}
                 />
               </div>
@@ -708,7 +708,7 @@ export default function AnalyticsDashboardPage() {
           <div className="analytics-panel">
             <div className="panel-header">
               <div className="panel-title">
-                <PieIcon size={16} color="#38bdf8" />
+                <PieIcon size={16} color="#f26522" />
                 <span>VESSEL FLEET CLASSIFICATION &amp; TRAFFIC VOLUME</span>
               </div>
               <span className="panel-badge">APACHE ECHARTS DONUT</span>

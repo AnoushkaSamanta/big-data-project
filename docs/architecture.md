@@ -17,8 +17,8 @@ flowchart TB
 
     subgraph BATCH["Batch Layer — offline, runs periodically"]
         CLEAN["load_historical.py<br/>CSV → Parquet"]
-        PRIOR["build_coverage_prior.py<br/>Spark"]
-        TRAIN["train.py<br/>IsolationForest"]
+        PRIOR["build_coverage_prior.py<br/>Spark Core"]
+        TRAIN["train.py<br/>Spark MLlib"]
     end
 
     subgraph SPEED["Speed Layer — continuous"]

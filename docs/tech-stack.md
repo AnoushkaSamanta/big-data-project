@@ -22,7 +22,7 @@ Every component, the version it is pinned to, why it was chosen, and what was re
 | Batch processing | Apache Spark (PySpark) | `3.5.1` | Coverage prior, historical analytics |
 | Storage | PostgreSQL + PostGIS | `postgis/postgis:16-3.4` | Positions, state, alerts, geofences |
 | Spatial indexing | H3 | `h3==3.7.7` | Grid cells for the coverage prior |
-| ML | scikit-learn | `1.4.2` | IsolationForest + preprocessing pipeline |
+| ML at scale | Apache Spark MLlib (`pyspark.ml`) | `3.5.1` | Distributed VectorAssembler, StandardScaler, KMeans clustering |
 | Dashboard | Next.js + Deck.gl | `15` / `9.x` | Tactical radar map, alert feed, health |
 | Columnar storage | Parquet (PyArrow) | `15.0.2` | Cleaned historical data |
 | Orchestration | Docker Compose | v2 spec | Local reproducible stack |
@@ -86,18 +86,19 @@ The coverage prior needs to bucket the ocean into cells. H3's hexagonal cells ha
 
 **Rejected:** raw 0.1° lat/lon grid (area distortion, awkward neighbour logic), S2 (comparable, but weaker Python tooling).
 
-### 3.6 scikit-learn IsolationForest
+### 3.6 Spark MLlib (`pyspark.ml`) for Machine Learning at Scale
 
-**Chosen because** the problem is unsupervised multivariate outlier detection over a modest feature vector, with no meaningful real labels. IsolationForest is fast, requires no distance metric tuning, and handles mixed-scale features once a `RobustScaler` is fitted ahead of it.
+**Chosen because** trajectory anomaly detection across multi-gigabyte maritime datasets requires distributed feature extraction and scalable clustering. Using `pyspark.ml.Pipeline` (`VectorAssembler` + `StandardScaler` + `KMeans`), feature matrices and distance centroid computations scale horizontally across worker nodes. 
 
-The entire preprocessing pipeline is serialised with the model and feature names, and feature-name equality is asserted on load — a bare `model.pkl` invites silent column-order mismatch between training and serving.
+Fitted cluster centroids and variance bounds are exported to the scoring runtime, guaranteeing train/serve consistency and enabling sub-millisecond streaming inference against the PostGIS live state.
 
 | Rejected | Why |
 |---|---|
+| Scikit-learn alone | Restricted to single-node memory and CPU cores; cannot scale across hundreds of millions of historical pings. |
 | LSTM autoencoder | Would be a better trajectory model, but needs far more data, far more tuning, and would dominate the project's time budget for uncertain gain. |
 | One-Class SVM | Scales poorly past ~10k samples; kernel choice is another tuning axis. |
 | DBSCAN | Clustering, not scoring — no anomaly score to threshold or rank. |
-| Supervised classifier | No real labels exist. Training on synthetic injections alone would only learn the injection function. |
+| Supervised classifier | No real labels exist in wild maritime data. Training on synthetic injections alone would only learn the injection function. |
 
 ### 3.7 Next.js + Deck.gl + MapLibre GL
 

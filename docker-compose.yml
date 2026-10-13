@@ -91,6 +91,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ais_dev_password}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./backend:/app/backend
     depends_on:
       kafka:
         condition: service_healthy
@@ -108,10 +110,65 @@ services:
     command: ["python3", "-m", "streaming.sweeper", "--interval", "30", "--db-url", "postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais"]
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais
+    volumes:
+      - ./backend:/app/backend
     depends_on:
       postgres:
         condition: service_healthy
     mem_limit: 400m
+
+  scorer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ais-scorer
+    restart: unless-stopped
+    profiles: ["stream"]
+    command: ["python3", "-m", "detection.ml_scorer", "--loop", "--interval", "45", "--db-url", "postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais
+    volumes:
+      - ./backend:/app/backend
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 500m
+
+  spark-master:
+    image: bitnami/spark:3.5.1
+    container_name: ais-spark-master
+    restart: unless-stopped
+    profiles: ["batch"]
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    mem_limit: 1500m
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    container_name: ais-spark-worker
+    restart: unless-stopped
+    profiles: ["batch"]
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    mem_limit: 1500m
 
 
 volumes:

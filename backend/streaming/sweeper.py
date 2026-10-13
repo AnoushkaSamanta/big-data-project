@@ -103,7 +103,7 @@ RETURNING mmsi, score, severity, details;
 UPDATE_STATUS_SQL = """
 UPDATE vessel_latest_state v
 SET status = 'dark'
-WHERE v.mmsi IN %s;
+WHERE v.mmsi = ANY(%s);
 """
 
 SWEEP_RENDEZVOUS_SQL = """
@@ -172,7 +172,7 @@ def perform_sweep(cursor, conn, args) -> int:
     total_new = 0
 
     if new_alerts:
-        dark_mmsis = tuple(row["mmsi"] for row in new_alerts)
+        dark_mmsis = [row["mmsi"] for row in new_alerts]
         cursor.execute(UPDATE_STATUS_SQL, (dark_mmsis,))
         conn.commit()
 
@@ -212,28 +212,47 @@ def run_sweeper(args):
         f"(min_obs={args.min_obs}, min_score={args.min_score}x, dedup={args.dedup_hours}h)..."
     )
 
-    conn = psycopg2.connect(args.db_url)
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    conn = None
+    cursor = None
 
     try:
         while True:
             t0 = time.time()
             try:
+                if conn is None or conn.closed != 0:
+                    logger.info("Connecting to PostgreSQL for absence sweeper...")
+                    conn = psycopg2.connect(args.db_url)
+                    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
                 alert_count = perform_sweep(cursor, conn, args)
                 duration = time.time() - t0
                 if alert_count > 0:
                     logger.info(f"Sweep completed in {duration:.2f}s: generated {alert_count} new dark vessel alert(s).")
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                logger.error(f"Database connection error during sweep: {e}. Reconnecting in {args.interval}s...")
+                try:
+                    if cursor:
+                        cursor.close()
+                    if conn:
+                        conn.close()
+                except Exception as close_err:
+                    logger.debug(f"Error while closing failed connection: {close_err}")
+                conn = None
+                cursor = None
             except Exception as e:
                 logger.error(f"Error during absence sweep: {e}")
-                conn.rollback()
+                if conn:
+                    conn.rollback()
 
             time.sleep(args.interval)
 
     except KeyboardInterrupt:
         logger.info("Stopping absence sweeper...")
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 if __name__ == "__main__":

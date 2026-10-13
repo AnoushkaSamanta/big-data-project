@@ -81,7 +81,7 @@ export default function DocsSidebar({ activeDocId, onSelectDoc }: DocsSidebarPro
       <div className="docs-pill-selector">
         <div className="docs-pill">
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Radio size={14} color="#38bdf8" />
+            <Radio size={14} color="#f26522" />
             <span style={{ fontWeight: 600 }}>Streaming KRaft Pipeline</span>
           </div>
           <ChevronDown size={14} color="#64748b" />
@@ -129,9 +129,9 @@ export default function DocsSidebar({ activeDocId, onSelectDoc }: DocsSidebarPro
                           fontFamily: "var(--font-mono)",
                           background:
                             item.badge === "CORE"
-                              ? "rgba(56, 189, 248, 0.18)"
-                              : "rgba(244, 63, 94, 0.18)",
-                          color: item.badge === "CORE" ? "#38bdf8" : "#f43f5e",
+                              ? "rgba(242, 101, 34, 0.18)"
+                              : "rgba(239, 68, 68, 0.18)",
+                          color: item.badge === "CORE" ? "#f26522" : "#f87171",
                           padding: "1px 5px",
                           borderRadius: "3px",
                         }}

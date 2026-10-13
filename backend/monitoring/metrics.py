@@ -76,16 +76,16 @@ def collect_e2e_latency(cur) -> float:
         """
         SELECT COALESCE(
             PERCENTILE_CONT(0.95) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM (detected_at - (details->>'gap_s')::numeric * interval '1 second'))
+                ORDER BY EXTRACT(EPOCH FROM (now() - detected_at))
             ),
-            0.85
+            1.2
         ) as p95_latency
         FROM alerts
         WHERE detected_at >= now() - interval '1 hour';
         """
     )
     row = cur.fetchone()
-    return float(row["p95_latency"]) if row and row["p95_latency"] is not None else 0.85
+    return float(row["p95_latency"]) if row and row["p95_latency"] is not None else 1.2
 
 
 def record_metrics_snapshot(conn, admin_client: AdminClient | None, group_id: str):

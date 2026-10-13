@@ -60,21 +60,37 @@ export default function AlertFeed({
     });
   }, [alerts, filterSeverity, filterType, searchMmsi]);
 
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: alerts.length };
+    for (const a of alerts) {
+      counts[a.alert_type] = (counts[a.alert_type] || 0) + 1;
+    }
+    return counts;
+  }, [alerts]);
+
+  const severityCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: alerts.length };
+    for (const a of alerts) {
+      counts[a.severity] = (counts[a.severity] || 0) + 1;
+    }
+    return counts;
+  }, [alerts]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Quick Search Input */}
-      <div style={{ position: "relative", marginBottom: "8px" }}>
+      <div style={{ position: "relative", marginBottom: "10px" }}>
         <input
           type="text"
           value={searchMmsi}
           onChange={(e) => setSearchMmsi(e.target.value)}
-          placeholder="Filter by MMSI..."
+          placeholder="Filter alerts by MMSI or country..."
           style={{
             width: "100%",
             background: "rgba(10, 15, 26, 0.8)",
             border: "1px solid var(--silver-border-subtle)",
             borderRadius: "4px",
-            padding: "6px 28px 6px 26px",
+            padding: "7px 28px 7px 28px",
             fontSize: "11px",
             color: "var(--silver-100)",
             fontFamily: "var(--font-mono)",
@@ -82,9 +98,9 @@ export default function AlertFeed({
           }}
         />
         <Search
-          size={12}
+          size={13}
           color="var(--silver-400)"
-          style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)" }}
+          style={{ position: "absolute", left: "9px", top: "50%", transform: "translateY(-50%)" }}
         />
         {searchMmsi && (
           <button
@@ -106,40 +122,140 @@ export default function AlertFeed({
         )}
       </div>
 
-      {/* Anomaly Type Filter Pills (Horizontal scrollable) */}
-      <div
-        style={{
-          display: "flex",
-          gap: "4px",
-          marginBottom: "8px",
-          overflowX: "auto",
-          paddingBottom: "2px",
-        }}
-      >
-        {ANOMALY_TYPES.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setFilterType(t.id)}
-            className={`tab-btn ${filterType === t.id ? "active" : ""}`}
-            style={{ fontSize: "10px", padding: "3px 7px", whiteSpace: "nowrap" }}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Detection Engine / Anomaly Type Filter Pills (Wrap so none are hidden) */}
+      <div style={{ marginBottom: "10px" }}>
+        <div
+          style={{
+            fontSize: "10px",
+            fontWeight: 700,
+            color: "var(--silver-400)",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            marginBottom: "6px",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Detection Engine / Category</span>
+          <span style={{ color: "var(--silver-300)", fontFamily: "var(--font-mono)" }}>
+            {filtered.length} visible
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "5px",
+          }}
+        >
+          {ANOMALY_TYPES.map((t) => {
+            const count = typeCounts[t.id] || 0;
+            const isSelected = filterType === t.id;
+            const isML = t.id === "ml_anomaly";
+
+            return (
+              <button
+                key={t.id}
+                onClick={() => setFilterType(t.id)}
+                className={`tab-btn ${isSelected ? "active" : ""}`}
+                style={{
+                  fontSize: "10.5px",
+                  padding: "4px 8px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  borderRadius: "4px",
+                  background: isSelected
+                    ? isML
+                      ? "rgba(168, 85, 247, 0.25)"
+                      : "var(--bg-card)"
+                    : isML
+                    ? "rgba(168, 85, 247, 0.1)"
+                    : "rgba(255, 255, 255, 0.03)",
+                  border: isSelected
+                    ? isML
+                      ? "1px solid #c084fc"
+                      : "1px solid var(--silver-border)"
+                    : isML
+                    ? "1px solid rgba(168, 85, 247, 0.4)"
+                    : "1px solid rgba(255, 255, 255, 0.08)",
+                  color: isSelected
+                    ? isML
+                      ? "#f3e8ff"
+                      : "var(--silver-100)"
+                    : isML
+                    ? "#d8b4fe"
+                    : "var(--silver-400)",
+                  cursor: "pointer",
+                }}
+              >
+                <span>{t.label}</span>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    padding: "1px 5px",
+                    borderRadius: "8px",
+                    background: isSelected
+                      ? isML
+                        ? "#9333ea"
+                        : "rgba(255, 255, 255, 0.18)"
+                      : "rgba(255, 255, 255, 0.07)",
+                    color: isSelected ? "#ffffff" : isML ? "#e9d5ff" : "var(--silver-400)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Severity Filter pills */}
-      <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
-        {["all", "high", "medium", "low"].map((sev) => (
-          <button
-            key={sev}
-            onClick={() => setFilterSeverity(sev)}
-            className={`tab-btn ${filterSeverity === sev ? "active" : ""}`}
-            style={{ textTransform: "uppercase" }}
-          >
-            {sev}
-          </button>
-        ))}
+      <div style={{ marginBottom: "12px" }}>
+        <div
+          style={{
+            fontSize: "10px",
+            fontWeight: 700,
+            color: "var(--silver-400)",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            marginBottom: "6px",
+          }}
+        >
+          <span>Severity Filter</span>
+        </div>
+        <div style={{ display: "flex", gap: "5px" }}>
+          {["all", "high", "medium", "low"].map((sev) => {
+            const count = severityCounts[sev] || 0;
+            const isSelected = filterSeverity === sev;
+            return (
+              <button
+                key={sev}
+                onClick={() => setFilterSeverity(sev)}
+                className={`tab-btn ${isSelected ? "active" : ""}`}
+                style={{
+                  textTransform: "uppercase",
+                  flex: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
+                  padding: "5px 6px",
+                  fontSize: "10px",
+                }}
+              >
+                <span>{sev}</span>
+                <span style={{ fontSize: "9px", opacity: 0.7, fontFamily: "var(--font-mono)" }}>
+                  ({count})
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -169,6 +285,9 @@ export default function AlertFeed({
                   alert.details.loiter_hours !== undefined ||
                   alert.details.avg_speed_knots !== undefined ||
                   alert.details.reconstruction_error !== undefined ||
+                  alert.details.raw_decision_score !== undefined ||
+                  alert.details.tortuosity !== undefined ||
+                  alert.details.top_contributing_features !== undefined ||
                   alert.details.coverage_n !== undefined ||
                   alert.details.transceiver_class)
             );
@@ -314,6 +433,38 @@ export default function AlertFeed({
                     )}
 
                     {/* ML Anomaly */}
+                    {alert.details?.raw_decision_score !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Decision Score</span>
+                        <span style={{ color: "var(--color-dark)" }}>
+                          {Number(alert.details.raw_decision_score).toFixed(3)}
+                        </span>
+                      </div>
+                    )}
+
+                    {alert.details?.tortuosity !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Tortuosity</span>
+                        <span>{Number(alert.details.tortuosity).toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {alert.details?.window_pings !== undefined && (
+                      <div className="evidence-cell">
+                        <span>Window Pings</span>
+                        <span>{alert.details.window_pings} pings</span>
+                      </div>
+                    )}
+
+                    {alert.details?.top_contributing_features && alert.details.top_contributing_features.length > 0 && (
+                      <div className="evidence-cell" style={{ gridColumn: "span 2" }}>
+                        <span>Top Feature Anomaly</span>
+                        <span style={{ color: "var(--color-stale)" }}>
+                          {alert.details.top_contributing_features[0].feature} ({alert.details.top_contributing_features[0].z_score}σ)
+                        </span>
+                      </div>
+                    )}
+
                     {alert.details?.reconstruction_error !== undefined && (
                       <div className="evidence-cell">
                         <span>Recon Error</span>

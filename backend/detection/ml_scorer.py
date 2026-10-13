@@ -33,6 +33,8 @@ def parse_args():
         default=os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais"),
     )
     parser.add_argument("--hours", type=int, default=2, help="Lookback window in hours from database")
+    parser.add_argument("--loop", action="store_true", help="Run continuously in a loop")
+    parser.add_argument("--interval", type=int, default=60, help="Loop interval in seconds (default: 60)")
     return parser.parse_args()
 
 
@@ -44,19 +46,20 @@ def load_model_bundle(model_path: str):
         from detection.train import parse_args as train_parse_args
         from detection.train import train_model
 
-        train_model(train_parse_args())
+        train_model(train_parse_args([]))
 
     bundle = joblib.load(model_path)
     assert bundle["feature_names"] == FEATURE_NAMES, "Feature name mismatch in loaded model!"
-    logger.info(f"Loaded IsolationForest model version {bundle.get('version')} (trained at {bundle.get('trained_at')})")
+    model_type = bundle.get("model_type", "sklearn_iforest")
+    logger.info(f"Loaded [{model_type}] model version {bundle.get('version')} (trained at {bundle.get('trained_at')})")
     return bundle
 
 
 def get_top_contributing_features(scaler, feature_names, x_raw: np.ndarray, top_k: int = 3) -> list[dict[str, Any]]:
     """Estimate top anomalous features based on robust z-score magnitude."""
     # RobustScaler center is median, scale is IQR
-    medians = scaler.center_
-    iqrs = scaler.scale_
+    medians = getattr(scaler, "center_", np.zeros(len(x_raw)))
+    iqrs = getattr(scaler, "scale_", np.ones(len(x_raw)))
     z_scores = np.abs((x_raw - medians) / np.maximum(iqrs, 1e-4))
 
     top_indices = np.argsort(z_scores)[::-1][:top_k]
@@ -70,11 +73,9 @@ def get_top_contributing_features(scaler, feature_names, x_raw: np.ndarray, top_
 
 
 def score_database_windows(model_bundle, db_url: str, hours: int):
-    """Query recent vessel positions, extract trajectory window features, and score with Isolation Forest."""
-    pipeline = model_bundle["pipeline"]
-    scaler = pipeline.named_steps["scaler"]
-    iforest = pipeline.named_steps["iforest"]
+    """Query recent vessel positions, extract trajectory window features, and score with Spark MLlib / Isolation Forest."""
     feature_names = model_bundle["feature_names"]
+    model_type = model_bundle.get("model_type", "sklearn_iforest")
 
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
@@ -82,7 +83,7 @@ def score_database_windows(model_bundle, db_url: str, hours: int):
     query = """
     SELECT mmsi, ts, ST_Y(geom) as lat, ST_X(geom) as lon, sog, cog, heading, vessel_type
     FROM vessel_positions
-    WHERE ts >= now() - (%s || ' hours')::interval
+    WHERE ts >= COALESCE((SELECT MAX(ts) FROM vessel_positions), now()) - (%s || ' hours')::interval
     ORDER BY mmsi, ts;
     """
     cur.execute(query, (hours,))
@@ -97,47 +98,107 @@ def score_database_windows(model_bundle, db_url: str, hours: int):
     df = pd.DataFrame(rows, columns=["MMSI", "ts", "LAT", "LON", "SOG", "COG", "Heading", "VesselType"])
     logger.info(f"Extracted {len(df)} pings across {df['MMSI'].nunique()} vessels. Extracting window features...")
 
-    alerts_to_insert = []
-
+    valid_trajectories = []
     for mmsi, mmsi_df in df.groupby("MMSI"):
         feats = compute_trajectory_features(mmsi_df)
-        if feats is None:
-            continue
+        if feats is not None:
+            valid_trajectories.append((mmsi, feats, mmsi_df.iloc[-1], len(mmsi_df)))
 
-        x_vec = np.array([[feats[fn] for fn in feature_names]])
-        score_raw = float(iforest.decision_function(x_vec)[0])
-        prediction = int(iforest.predict(x_vec)[0])
+    if not valid_trajectories:
+        logger.info("No valid vessel trajectory windows for scoring.")
+        cur.close()
+        conn.close()
+        return
 
-        # IsolationForest decision_function < 0 denotes anomaly
-        if prediction == -1 or score_raw < 0:
-            top_feats = get_top_contributing_features(scaler, feature_names, x_vec[0])
-            last_ping = mmsi_df.iloc[-1]
-            detected_at = datetime.now(timezone.utc)
+    logger.info(f"Scoring {len(valid_trajectories)} vessel trajectory windows with [{model_type}]...")
 
-            # Anomaly severity based on negative score depth
-            severity = "high" if score_raw < -0.15 else ("medium" if score_raw < -0.05 else "low")
-            anomaly_score = round(abs(min(0.0, score_raw)) * 10.0 + 1.0, 2)
+    features_df = pd.DataFrame([item[1] for item in valid_trajectories])[feature_names]
+    alerts_to_insert = []
+    detected_at = datetime.now(timezone.utc)
 
-            details = {
-                "raw_decision_score": round(score_raw, 4),
-                "top_contributing_features": top_feats,
-                "window_pings": len(mmsi_df),
-                "sog_mean": round(feats["sog_mean"], 1),
-                "tortuosity": round(feats["path_tortuosity"], 2),
-            }
+    if model_type == "spark_mllib_kmeans":
+        cluster_centers = np.array(model_bundle["cluster_centers"])
+        scaler_mean = np.array(model_bundle["scaler_mean"])
+        scaler_std = np.maximum(np.array(model_bundle["scaler_std"]), 1e-4)
+        threshold_dist = float(model_bundle["threshold_distance"])
 
-            alerts_to_insert.append(
-                (
-                    int(mmsi),
-                    "ml_anomaly",
-                    anomaly_score,
-                    severity,
-                    detected_at,
-                    float(last_ping["LAT"]),
-                    float(last_ping["LON"]),
-                    json.dumps(details),
+        for i, (mmsi, feats, last_ping, window_len) in enumerate(valid_trajectories):
+            x_raw = features_df.iloc[i].to_numpy().astype(float)
+            scaled_x = (x_raw - scaler_mean) / scaler_std
+            distances = np.linalg.norm(cluster_centers - scaled_x, axis=1)
+            min_dist = float(np.min(distances))
+
+            if min_dist > threshold_dist:
+                z_scores = np.abs(scaled_x)
+                top_indices = np.argsort(z_scores)[::-1][:3]
+                top_feats = [
+                    {"feature": feature_names[idx], "value": round(float(x_raw[idx]), 2), "z_score": round(float(z_scores[idx]), 2)}
+                    for idx in top_indices
+                ]
+
+                severity = "high" if min_dist > threshold_dist * 1.5 else ("medium" if min_dist > threshold_dist * 1.2 else "low")
+                anomaly_score = round((min_dist / max(1e-4, threshold_dist)) * 2.0, 2)
+
+                details = {
+                    "model_engine": "spark_mllib_kmeans",
+                    "centroid_distance": round(min_dist, 4),
+                    "threshold": round(threshold_dist, 4),
+                    "top_contributing_features": top_feats,
+                    "window_pings": window_len,
+                    "sog_mean": round(feats["sog_mean"], 1),
+                    "tortuosity": round(feats["path_tortuosity"], 2),
+                }
+
+                alerts_to_insert.append(
+                    (
+                        int(mmsi),
+                        "ml_anomaly",
+                        anomaly_score,
+                        severity,
+                        detected_at,
+                        float(last_ping["LAT"]),
+                        float(last_ping["LON"]),
+                        json.dumps(details),
+                    )
                 )
-            )
+    else:
+        pipeline = model_bundle["pipeline"]
+        scaler = pipeline.named_steps["scaler"]
+        raw_scores = pipeline.decision_function(features_df)
+        predictions = pipeline.predict(features_df)
+
+        for i, (mmsi, feats, last_ping, window_len) in enumerate(valid_trajectories):
+            score_raw = float(raw_scores[i])
+            prediction = int(predictions[i])
+
+            if prediction == -1 or score_raw < 0:
+                x_raw = features_df.iloc[i].to_numpy()
+                top_feats = get_top_contributing_features(scaler, feature_names, x_raw)
+
+                severity = "high" if score_raw < -0.15 else ("medium" if score_raw < -0.05 else "low")
+                anomaly_score = round(abs(min(0.0, score_raw)) * 10.0 + 1.0, 2)
+
+                details = {
+                    "model_engine": "sklearn_iforest",
+                    "raw_decision_score": round(score_raw, 4),
+                    "top_contributing_features": top_feats,
+                    "window_pings": window_len,
+                    "sog_mean": round(feats["sog_mean"], 1),
+                    "tortuosity": round(feats["path_tortuosity"], 2),
+                }
+
+                alerts_to_insert.append(
+                    (
+                        int(mmsi),
+                        "ml_anomaly",
+                        anomaly_score,
+                        severity,
+                        detected_at,
+                        float(last_ping["LAT"]),
+                        float(last_ping["LON"]),
+                        json.dumps(details),
+                    )
+                )
 
     if alerts_to_insert:
         insert_sql = """
@@ -158,4 +219,17 @@ def score_database_windows(model_bundle, db_url: str, hours: int):
 if __name__ == "__main__":
     args = parse_args()
     bundle = load_model_bundle(args.model_path)
-    score_database_windows(bundle, args.db_url, args.hours)
+    if args.loop:
+        logger.info(f"Starting ML Scorer loop (interval={args.interval}s, lookback={args.hours}h)...")
+        import time
+        try:
+            while True:
+                try:
+                    score_database_windows(bundle, args.db_url, args.hours)
+                except Exception as e:
+                    logger.error(f"Error during ML score sweep: {e}")
+                time.sleep(args.interval)
+        except KeyboardInterrupt:
+            logger.info("Stopping ML Scorer loop.")
+    else:
+        score_database_windows(bundle, args.db_url, args.hours)

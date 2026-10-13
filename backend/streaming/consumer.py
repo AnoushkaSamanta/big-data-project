@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -94,6 +95,7 @@ def flush_batch_to_postgres(
 
         # 2. Batch upsert latest state for affected vessels
         affected_mmsis = {r["MMSI"] for r in valid_records}
+        batch_counts = Counter(r["MMSI"] for r in valid_records)
         latest_values = []
         for mmsi in affected_mmsis:
             v_state = state_table[mmsi]
@@ -112,7 +114,7 @@ def flush_batch_to_postgres(
                     v_state.vessel_type,
                     v_state.transceiver_class,
                     v_state.last_cell,
-                    v_state.msg_count,
+                    batch_counts[mmsi],
                     v_state.status,
                 )
             )
@@ -143,7 +145,7 @@ def flush_batch_to_postgres(
             cursor,
             sql_upsert_latest,
             latest_values,
-            template="(%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            template="(%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             page_size=500,
         )
 
@@ -271,9 +273,9 @@ def run_consumer(args):
                 # 5. Atomic Batch Write to Database
                 flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
 
-                # 6. Commit Kafka offsets for all messages in this batch
+                # 6. Commit Kafka offsets across all assigned partitions
                 if batch_messages:
-                    consumer.commit(batch_messages[-1])
+                    consumer.commit(asynchronous=False)
 
                 if alerts:
                     logger.info(f"Generated {len(alerts)} in-stream alert(s): {[a.alert_type for a in alerts]}")
@@ -295,7 +297,7 @@ def run_consumer(args):
             processed_records, alerts = process_batch(batch_records, state_table)
             flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
             if batch_messages:
-                consumer.commit(batch_messages[-1])
+                consumer.commit(asynchronous=False)
         consumer.close()
         producer.flush(10)
         cursor.close()

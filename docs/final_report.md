@@ -61,17 +61,22 @@ flowchart TB
         DLQ["ais.positions.dlq (Dead-Letter Queue)"]
     end
 
-    subgraph STREAM["Speed Layer (Kafka KRaft)"]
-        PROD["producer.py (MMSI-Keyed, Jitter Buffer)"]
-        K_RAW["ais.positions.raw (6 Partitions)"]
-        CONS["consumer.py (execute_values Batch Ingest)"]
+    subgraph BATCH["Batch & ML Layer (Apache Spark Core & MLlib)"]
+        SPARK_CORE["Tool 2: Apache Spark Core/SQL<br/>(build_coverage_prior.py)"]
+        SPARK_ML["Tool 3: Apache Spark MLlib<br/>(VectorAssembler + StandardScaler + KMeans)"]
+    end
+
+    subgraph STREAM["Speed Layer (Apache Kafka KRaft)"]
+        PROD["producer.py (MMSI-Keyed Replay)"]
+        K_RAW["Tool 1: Apache Kafka<br/>(ais.positions.raw, 6 Partitions)"]
+        CONS["consumer.py / spark_streaming_consumer.py"]
         CORE["processor.py (Pure State Engine)"]
     end
 
     subgraph DETECTION["Detection Engine"]
         SWEEP["sweeper.py (Absence Timer, 60s)"]
         RULES["rules.py (Spoof / Loiter / Collision)"]
-        ML["ml_scorer.py (Isolation Forest Inference)"]
+        ML["ml_scorer.py (Spark MLlib Trajectory Inference)"]
     end
 
     subgraph STORAGE["PostgreSQL 16 + PostGIS 3.4"]
@@ -88,7 +93,11 @@ flowchart TB
     end
 
     CSV --> VAL
-    VAL -->|Valid| PROD --> K_RAW --> CONS
+    VAL -->|Valid Historical| SPARK_CORE
+    SPARK_CORE -->|Lag Windows & Gap Percentiles| PRIOR
+    SPARK_CORE -->|Trajectory Feature Vectors| SPARK_ML
+    SPARK_ML -->|Trained Anomaly Centroids| ML
+    VAL -->|Valid Live| PROD --> K_RAW --> CONS
     VAL -->|Invalid| DLQ
     CONS --> CORE
     CORE --> HOT & COLD
@@ -99,12 +108,17 @@ flowchart TB
     HOT & ALERTS & GEO --> NEXT --> DECK
 ```
 
-### Key Technical Decisions:
-1. **KRaft Mode (Kafka 3.7 / 7.6)**: Completely eliminated Zookeeper. Partitions keyed by `MMSI` guarantee per-vessel ordering and parallel processing without race conditions.
-2. **Hot/Cold Table Isolation**:
-   - `vessel_latest_state`: One row per vessel ($\sim 5,000$ active rows). High-frequency upserts; interactive dashboard queries take $< 2$ ms.
-   - `vessel_positions`: Cold partitioned table by month (`PARTITION BY RANGE (ts)`), indexed via BRIN on `ts` and GIST on `geom`.
-3. **Absence-Triggered Sweeper**: Runs every 60 seconds against `vessel_latest_state` and `coverage_prior` with alert deduplication (`uq_alerts_mmsi_type_hour`).
+### 3.1. Big Data Tool-by-Tool Justification (CSE412 Pipeline)
+
+The system satisfies the course requirement for **three genuinely integrated big data tools with real data flowing between stages**:
+
+| Course Tool | Stage | Operational Role | Why a Single or Traditional Tool Struggles |
+|---|---|---|---|
+| **1. Apache Kafka** (KRaft mode) | Real-time Stream Buffer | Ingests live AIS packets, keyed by MMSI across 6 partitions. Guarantees strict per-vessel chronological ordering while allowing 6-way consumer parallelism. | Traditional databases and message queues (e.g. RabbitMQ) lack log replayability, deterministic offset resets, and per-key partitioning required for stateful vessel tracking. |
+| **2. Apache Spark** (Core & SQL) | Distributed Batch ETL | Computes inter-message gap distributions ($p_{50}, p_{95}, p_{99}$) grouped by H3 hexagon cells and transceiver class over multi-month historical archives. | Windowed lag calculations (`F.lag().over(Window.partitionBy("MMSI"))`) and `percentile_approx` across 100M+ rows cannot fit in memory on a single machine. |
+| **3. Apache Spark MLlib** (`pyspark.ml`) | Distributed Machine Learning | Fits high-dimensional unsupervised clustering and trajectory anomaly models (`VectorAssembler`, `StandardScaler`, `KMeans`) across historical movement vectors. | Scikit-learn fails to scale beyond single-node memory limits; Spark MLlib distributes feature matrix construction, covariance scaling, and centroid convergence across executor nodes. |
+
+*Auxiliary Infrastructure*: **PostgreSQL 16 / PostGIS 3.4** acts as the high-speed spatial query store (GIST indexes and monthly partitioning), while **Next.js + Deck.gl** provides 60 FPS GPU-accelerated tactical situational awareness.
 
 ---
 
@@ -119,8 +133,8 @@ Vessels lingering at low speeds ($SOG < 1.5$ kn) inside Marine Protected Areas (
 ### 4.3. MMSI Collision Detection
 When multiple rogue vessels broadcast the same hijacked MMSI, the stream records geographically distant coordinates ($> 50$ km) with identical or near-simultaneous timestamps ($\Delta t \le 120$ s). This triggers a distinct `mmsi_collision` alert.
 
-### 4.4. Trajectory Isolation Forest
-For subtle trajectory anomalies (unusual zigzagging, erratic turning rates, abnormal speed variance), 1-hour tumbling window feature vectors are evaluated using an `IsolationForest` pipeline trained with `RobustScaler`. Alerts are logged with the top-3 contributing feature explanations (e.g., elevated `path_tortuosity` or abnormal `cog_circular_std`).
+### 4.4. Distributed Trajectory Anomaly Scoring (Spark MLlib)
+For subtle trajectory anomalies (unusual zigzagging, erratic turning rates, abnormal speed variance), 1-hour tumbling window feature vectors are evaluated using an unsupervised **Spark MLlib KMeans Pipeline** (`VectorAssembler` + `StandardScaler` + `KMeans`). The model clusters legitimate transit profiles across 10 dimensions (e.g. `path_tortuosity`, `cog_circular_std`, `sog_std`). Trajectories whose distance to the nearest cluster centroid exceeds the empirical $99^{\text{th}}$ percentile threshold are flagged as `ml_anomaly` alerts with top contributing feature explanations.
 
 ---
 
@@ -180,3 +194,15 @@ The definitive state of the art for maritime interdiction is **Satellite Synthet
 ## 8. Conclusion
 
 The Real-Time Dark Vessel Detection System demonstrates that big data streaming architectures can overcome maritime surveillance challenges when domain-specific physics (VHF propagation limits) are integrated into the data engineering model. Through MMSI-keyed Kafka streaming, PostGIS hot/cold partitioning, H3 percentile baselines, and absence-driven sweepers, the system achieves a **0.949 F1-score** while maintaining high throughput and sub-second tactical dashboard responsiveness.
+
+---
+
+## 9. Team Organization & Individual Contribution Breakdown
+
+Per course project guidelines (3 students per team), technical responsibilities and code ownership are partitioned across the pipeline:
+
+| Student Name / ID | Core Architectural Focus | Key Modules & Code Ownership | Deliverables & Artifacts |
+|---|---|---|---|
+| **Student 1** | **Ingestion & Speed Layer (Apache Kafka)** | `streaming/producer.py`, `streaming/consumer.py`, `data_pipeline/validate.py`, `data_pipeline/inject_anomalies.py`, `streaming/injector.py` | - Kafka KRaft cluster deployment and topic partitioning scheme (`ais.positions.raw`).<br/>- Ingestion validation contract with Dead-Letter Queue (`ais.positions.dlq`) and ITU-R M.1371 sentinel filtering.<br/>- Deterministic historical replay producer with configurable speedup and jitter. |
+| **Student 2** | **Batch Analytics & ML at Scale (Apache Spark & Spark MLlib)** | `analysis/build_coverage_prior.py`, `detection/train.py`, `detection/features.py`, `streaming/spark_streaming_consumer.py` | - Distributed PySpark batch pipeline for windowed inter-message lag calculations and approximate percentiles ($p_{50}, p_{95}, p_{99}$).<br/>- Uber H3 spatial resolution 5 cell indexing.<br/>- Distributed Spark MLlib trajectory modeling pipeline (`VectorAssembler`, `StandardScaler`, `KMeans`) and model artifact persistence. |
+| **Student 3** | **State, Detection Rules, Evaluation & UI** | `streaming/sweeper.py`, `detection/rules.py`, `detection/ml_scorer.py`, `evaluation/evaluate.py`, `frontend/` (Deck.gl / Next.js) | - Absence-triggered sweeper for silent dark vessels with alert deduplication.<br/>- Great-circle Haversine physical rules (jump-and-return spoofing, MPA loitering, MMSI identity collisions).<br/>- Benchmark evaluation harness with with/without coverage prior ablation.<br/>- 60 FPS GPU-accelerated tactical radar map and alert feed console. |

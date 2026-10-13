@@ -74,7 +74,7 @@ function Callout({
   children: React.ReactNode;
 }) {
   const icons = {
-    note: <Info size={18} color="#38bdf8" />,
+    note: <Info size={18} color="#f26522" />,
     tip: <Lightbulb size={18} color="#10b981" />,
     warning: <AlertTriangle size={18} color="#f59e0b" />,
   };
@@ -2653,7 +2653,7 @@ Accept: application/json`}
                       <td style={{ color: "#f43f5e" }}>58.8%</td>
                     </tr>
                     <tr>
-                      <td style={{ color: "#38bdf8", fontWeight: 600 }}>Adaptive H3 Prior (Our System)</td>
+                      <td style={{ color: "#f26522", fontWeight: 600 }}>Adaptive H3 Prior (Our System)</td>
                       <td style={{ color: "#10b981", fontWeight: 600 }}>0.941</td>
                       <td>0.958</td>
                       <td style={{ color: "#10b981", fontWeight: 700 }}>0.949</td>

@@ -14,7 +14,7 @@ import json
 import logging
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from confluent_kafka import Producer
@@ -48,7 +48,24 @@ def parse_args():
         default=90.0,
         help="Maximum artificial lateness in event seconds",
     )
-    parser.add_argument("--input-file", type=str, default="data/raw/sample.csv", help="Source AIS file")
+    parser.add_argument(
+        "--live-timestamps",
+        action="store_true",
+        default=True,
+        help="Dynamically shift event timestamps so the latest ping matches current UTC time",
+    )
+    parser.add_argument(
+        "--no-live-timestamps",
+        dest="live_timestamps",
+        action="store_false",
+        help="Preserve raw original historical timestamps without shifting to now()",
+    )
+    parser.add_argument(
+        "--input-file",
+        type=str,
+        default="data/raw/demo_scenarios.csv",
+        help="Source AIS file",
+    )
     return parser.parse_args()
 
 
@@ -61,7 +78,8 @@ def run_producer(args):
     random.seed(args.seed)
     logger.info(
         f"Starting producer replay to topic '{args.topic}' with speedup {args.speedup}x, "
-        f"late_fraction={args.late_fraction}, max_lateness={args.max_lateness}s..."
+        f"late_fraction={args.late_fraction}, max_lateness={args.max_lateness}s, "
+        f"live_timestamps={args.live_timestamps}..."
     )
 
     producer = Producer(
@@ -102,6 +120,17 @@ def run_producer(args):
 
     # 2. Sort chronologically by event timestamp
     records.sort(key=lambda r: parse_iso_timestamp(r["BaseDateTime"]))
+
+    # Normalize historical timestamps to current live stream time if requested
+    if args.live_timestamps and records:
+        latest_event_ts = parse_iso_timestamp(records[-1]["BaseDateTime"])
+        now_utc = datetime.now(timezone.utc)
+        shift_delta = now_utc - latest_event_ts
+        logger.info(f"Normalizing timestamps to live stream time (shift delta: {shift_delta})...")
+        for r in records:
+            orig_ts = parse_iso_timestamp(r["BaseDateTime"])
+            r["BaseDateTime"] = (orig_ts + shift_delta).isoformat()
+
     logger.info(f"Loaded {len(records)} records. Replaying...")
 
     # 3. Stream loop with out-of-order delay buffer

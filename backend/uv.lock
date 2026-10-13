@@ -84,6 +84,7 @@ dependencies = [
     { name = "pyproj", version = "3.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pyproj", version = "3.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "pyproj", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pyspark" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "ruff" },
@@ -95,11 +96,6 @@ dependencies = [
     { name = "tenacity" },
     { name = "websockets", version = "16.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "websockets", version = "17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-
-[package.optional-dependencies]
-batch = [
-    { name = "pyspark" },
 ]
 
 [package.metadata]
@@ -114,7 +110,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "pyarrow", specifier = ">=15.0.2" },
     { name = "pyproj", specifier = ">=3.6.1" },
-    { name = "pyspark", marker = "extra == 'batch'", specifier = ">=3.5.1" },
+    { name = "pyspark", specifier = ">=3.5.1" },
     { name = "pytest", specifier = ">=8.1.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "ruff", specifier = ">=0.4.4" },
@@ -125,7 +121,6 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.2.3" },
     { name = "websockets", specifier = ">=16.1.1" },
 ]
-provides-extras = ["batch"]
 
 [[package]]
 name = "exceptiongroup"
