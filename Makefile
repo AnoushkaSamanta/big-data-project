@@ -48,9 +48,12 @@ inject-all:      ## Inject all anomaly scenarios sequentially into Kafka stream
 live:            ## Stream live real-time AIS data from AISStream.io WebSocket
 	uv run --no-sync --project backend python3 -m streaming.aisstream_producer
 
-stream:          ## Run consumer and sweeper
+stream:          ## Run consumer, sweeper, scorer, and metrics telemetry daemon
 	@./scripts/check_prior.sh
 	docker compose --profile stream up -d
+
+metrics:         ## Run pipeline telemetry collector directly
+	uv run --no-sync --project backend python3 -m monitoring.metrics
 
 geofences:       ## Seed EEZ, MPA, and Port geofences into PostGIS
 	uv run --no-sync --project backend python3 -m data_pipeline.load_geofences

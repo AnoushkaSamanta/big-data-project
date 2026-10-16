@@ -8,8 +8,7 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { VesselState } from "@/app/api/vessels/route";
 import { AlertRecord } from "@/app/api/alerts/route";
-import { Globe, Compass, Moon, ChevronDown, MapPin, Layers, Radar, ShieldAlert, AlertTriangle, ExternalLink, Plus, Minus } from "lucide-react";
-import { computeDriftCone, DriftConeFeature } from "@/lib/drift";
+import { Globe, Compass, Moon, Plus, Minus } from "lucide-react";
 import {
   getVesselCountry,
   getVesselTypeName,
@@ -163,10 +162,9 @@ export default function DeckMap({
   onBoundsChange,
 }: DeckMapProps) {
   const [hoverInfo, setHoverInfo] = useState<any>(null);
-  const [activeBasemap, setActiveBasemap] = useState<"satellite" | "ocean" | "dark">("dark");
+  const [activeBasemap, setActiveBasemap] = useState<"satellite" | "ocean" | "dark">("satellite");
   const [viewState, setViewState] = useState<any>(INITIAL_VIEW_STATE);
   const [activeRegion, setActiveRegion] = useState<string>("Global World");
-  const [sectorDropdownOpen, setSectorDropdownOpen] = useState<boolean>(false);
 
   const latestAlertByMmsi = useMemo(() => {
     const map = new Map<number, AlertRecord>();
@@ -187,18 +185,6 @@ export default function DeckMap({
     return () => clearTimeout(timer);
   }, [viewState.longitude, viewState.latitude, viewState.zoom, onBoundsChange]);
 
-  // Close sector dropdown on outside click
-  useEffect(() => {
-    if (!sectorDropdownOpen) return;
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest(".sector-dropdown-wrapper")) {
-        setSectorDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [sectorDropdownOpen]);
 
   // Dynamic satellite style respecting showPlaceNames toggle
   const currentMapStyle = useMemo(() => {
@@ -304,35 +290,7 @@ export default function DeckMap({
       );
     }
 
-    // 4. Dead-Reckoning Drift Search Cones for Dark Vessels
-    const darkVesselsToRender = showDriftCones
-      ? vessels.filter((v) => v.status === "dark")
-      : selectedVessel && selectedVessel.status === "dark"
-      ? [selectedVessel]
-      : [];
-
-    if (darkVesselsToRender.length > 0) {
-      const coneFeatures: DriftConeFeature[] = darkVesselsToRender.map((v) =>
-        computeDriftCone(v.mmsi, v.lat, v.lon, v.sog, v.cog, v.last_seen)
-      );
-
-      list.push(
-        new GeoJsonLayer({
-          id: "drift-cones-layer",
-          data: {
-            type: "FeatureCollection",
-            features: coneFeatures,
-          },
-          pickable: true,
-          stroked: true,
-          filled: true,
-          lineWidthMinPixels: 1.5,
-          getLineColor: [248, 113, 113, 220], // Luminous crimson edge
-          getFillColor: [239, 68, 68, 55],    // Translucent search wedge
-          getLineWidth: 2,
-        })
-      );
-    }
+    // 4. Drift Cones omitted per user preference to clean the screen
 
     // 5. Anomaly Aura Pulse Layer (Draws glowing halo around all anomalous vessels)
     const anomalousVessels = vessels.filter((v) => latestAlertByMmsi.has(v.mmsi));
@@ -456,117 +414,27 @@ export default function DeckMap({
   return (
     <div className="map-viewport" style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Minimalist Floating Controls on the Right Side of the Map */}
+      {/* Clean Floating Controls on the Right Side of the Map */}
       <div className="mt-map-floating-controls">
-        {/* Unified Surveillance & Layer Control Card */}
-        <div className="mt-floating-control-card">
-          {/* Segmented Basemap Switcher */}
-          <div className="mt-basemap-btn-group">
-            {(["satellite", "ocean", "dark"] as const).map((key) => {
-              const item = BASEMAPS[key];
-              const Icon = item.icon;
-              const isActive = activeBasemap === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveBasemap(key)}
-                  className={`mt-basemap-pill-btn ${isActive ? "active" : ""}`}
-                  title={`Switch basemap to ${item.name}`}
-                >
-                  <Icon size={12} />
-                  <span>{item.name.replace("Earth ", "").replace("Nautical ", "").replace("Tactical ", "")}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-control-divider" />
-
-          {/* Quick Layer Toggles */}
-          <div className="mt-layer-btn-group">
-            <button
-              type="button"
-              onClick={onTogglePlaceNames}
-              className={`mt-layer-toggle-row ${showPlaceNames ? "active" : ""}`}
-              title="Toggle world borders, coastlines, and place names"
-            >
-              <div className="flex items-center gap-2">
-                <MapPin size={12} className={showPlaceNames ? "text-orange-500" : "text-slate-400"} />
-                <span className="text-xs text-slate-700">Names & Borders</span>
-              </div>
-              <span className={`mt-switch-dot ${showPlaceNames ? "on" : "off"}`} />
-            </button>
-
-            <button
-              type="button"
-              onClick={onToggleGeofences}
-              className={`mt-layer-toggle-row ${showGeofences ? "active" : ""}`}
-              title="Toggle EEZ maritime boundaries"
-            >
-              <div className="flex items-center gap-2">
-                <Layers size={12} className={showGeofences ? "text-orange-500" : "text-slate-400"} />
-                <span className="text-xs text-slate-700">EEZ Boundaries</span>
-              </div>
-              <span className={`mt-switch-dot ${showGeofences ? "on" : "off"}`} />
-            </button>
-
-            <button
-              type="button"
-              onClick={onToggleDriftCones}
-              className={`mt-layer-toggle-row ${showDriftCones ? "active" : ""}`}
-              title="Toggle dead-reckoning search uncertainty cones"
-            >
-              <div className="flex items-center gap-2">
-                <Radar size={12} className={showDriftCones ? "text-orange-500" : "text-slate-400"} />
-                <span className="text-xs text-slate-700">Drift Cones</span>
-              </div>
-              <span className={`mt-switch-dot ${showDriftCones ? "on" : "off"}`} />
-            </button>
-          </div>
-
-          <div className="mt-control-divider" />
-
-          {/* Sector Jump Dropdown */}
-          <div className="sector-dropdown-wrapper">
-            <button
-              type="button"
-              className={`mt-sector-trigger-btn ${sectorDropdownOpen ? "open" : ""}`}
-              onClick={() => setSectorDropdownOpen((prev) => !prev)}
-              title="Select surveillance theater"
-            >
-              <div className="flex items-center gap-2 truncate">
-                <Compass size={13} className="text-orange-500 shrink-0" />
-                <span className="text-xs font-semibold text-slate-800 truncate">{activeRegion}</span>
-              </div>
-              <ChevronDown size={12} className="text-slate-400 shrink-0" />
-            </button>
-
-            {sectorDropdownOpen && (
-              <div className="mt-floating-sector-menu">
-                <div className="mt-sector-menu-title">SURVEILLANCE THEATER</div>
-                {REGIONS.map((r) => {
-                  const isRegActive = activeRegion === r.name;
-                  return (
-                    <button
-                      key={r.name}
-                      type="button"
-                      className={`mt-sector-menu-item ${isRegActive ? "active" : ""}`}
-                      onClick={() => {
-                        handleRegionSelect(r);
-                        setSectorDropdownOpen(false);
-                      }}
-                    >
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs font-semibold text-slate-800">{r.name}</span>
-                        <span className="text-2xs text-slate-400">{r.desc}</span>
-                      </div>
-                      {isRegActive && <span className="mt-active-indicator-dot" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* Basemap View Selection */}
+        <div className="mt-basemap-btn-group">
+          {(["satellite", "ocean", "dark"] as const).map((key) => {
+            const item = BASEMAPS[key];
+            const Icon = item.icon;
+            const isActive = activeBasemap === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveBasemap(key)}
+                className={`mt-basemap-pill-btn ${isActive ? "active" : ""}`}
+                title={`Switch basemap to ${item.name}`}
+              >
+                <Icon size={12} />
+                <span>{item.name.replace("Earth ", "").replace("Nautical ", "").replace("Tactical ", "")}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Minimal Floating Zoom Pill */}

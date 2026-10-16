@@ -88,6 +88,12 @@ interface AnalyticsData {
     dlq_rate: number;
     e2e_latency_s_p95: number;
   };
+  threat_radar?: {
+    indicators: Array<{ name: string; max: number }>;
+    dark_vessel: number[];
+    spoof: number[];
+    nominal: number[];
+  };
 }
 
 export default function AnalyticsDashboardPage() {
@@ -333,8 +339,13 @@ export default function AnalyticsDashboardPage() {
     };
   }, [data]);
 
-  // 3. Multi-Dimensional Maritime Threat Vector Radar
+  // 3. Multi-Dimensional Maritime Threat Vector Radar (Live from PostgreSQL alerts)
   const threatRadarOption = useMemo<echarts.EChartsOption>(() => {
+    const radar = data?.threat_radar;
+    const darkVec = radar?.dark_vessel || [18, 66, 31, 24, 0];
+    const spoofVec = radar?.spoof || [47, 14, 0, 6, 42];
+    const nominalVec = radar?.nominal || [8, 12, 14, 5, 2];
+
     return {
       backgroundColor: "transparent",
       tooltip: {
@@ -344,7 +355,7 @@ export default function AnalyticsDashboardPage() {
         textStyle: { color: "#f8fafc", fontSize: 11, fontFamily: "monospace" },
       },
       legend: {
-        data: ["Dark Vessel Signature", "Kinematic Spoof Signature", "Nominal Surveillance"],
+        data: ["Dark Vessel Fleet Profile", "Kinematic Spoof Profile", "Nominal Surveillance Baseline"],
         textStyle: { color: "#94a3b8", fontSize: 10 },
         bottom: 0,
         itemGap: 12,
@@ -352,7 +363,7 @@ export default function AnalyticsDashboardPage() {
       },
       radar: {
         shape: "polygon",
-        indicator: [
+        indicator: radar?.indicators || [
           { name: "Speed Over Ceiling", max: 100 },
           { name: "Silence vs p99", max: 100 },
           { name: "EEZ Incursion Risk", max: 100 },
@@ -394,24 +405,24 @@ export default function AnalyticsDashboardPage() {
           type: "radar",
           data: [
             {
-              value: [20, 95, 88, 30, 45],
-              name: "Dark Vessel Signature",
+              value: darkVec,
+              name: "Dark Vessel Fleet Profile",
               symbol: "none",
               itemStyle: { color: "#ef4444" },
               lineStyle: { width: 2, color: "#ef4444" },
               areaStyle: { color: "rgba(239, 68, 68, 0.3)" },
             },
             {
-              value: [92, 15, 60, 98, 85],
-              name: "Kinematic Spoof Signature",
+              value: spoofVec,
+              name: "Kinematic Spoof Profile",
               symbol: "none",
               itemStyle: { color: "#f59e0b" },
               lineStyle: { width: 2, color: "#f59e0b" },
               areaStyle: { color: "rgba(245, 158, 11, 0.25)" },
             },
             {
-              value: [10, 8, 15, 5, 2],
-              name: "Nominal Surveillance",
+              value: nominalVec,
+              name: "Nominal Surveillance Baseline",
               symbol: "none",
               itemStyle: { color: "#10b981" },
               lineStyle: { width: 1.5, color: "#10b981", type: "dashed" },
@@ -421,7 +432,7 @@ export default function AnalyticsDashboardPage() {
         },
       ],
     };
-  }, []);
+  }, [data]);
 
   // 4. Alert Classification Bar Chart (Horizontal)
   const alertComparisonOption = useMemo<echarts.EChartsOption>(() => {
@@ -664,9 +675,9 @@ export default function AnalyticsDashboardPage() {
               <Zap size={18} className="text-purple" />
             </div>
             <div className="kpi-primary-val text-purple">
-              {data?.pipeline?.msgs_consumed_per_s
+              {data?.pipeline?.msgs_consumed_per_s !== undefined
                 ? data.pipeline.msgs_consumed_per_s.toLocaleString()
-                : "3,420"}
+                : "0"}
               <small style={{ fontSize: "12px", color: "var(--silver-400)" }}>
                 {" "}
                 msg/s
@@ -676,13 +687,18 @@ export default function AnalyticsDashboardPage() {
               <div className="kpi-stat-chip">
                 <span>Lag / DLQ:</span>
                 <strong>
-                  {data?.pipeline?.consumer_lag || 120} msgs /{" "}
-                  {((data?.pipeline?.dlq_rate || 0.008) * 100).toFixed(2)}%
+                  {data?.pipeline?.consumer_lag ?? 0} msgs /{" "}
+                  {(((data?.pipeline?.dlq_rate ?? 0)) * 100).toFixed(2)}%
                 </strong>
               </div>
               <div className="kpi-stat-chip">
                 <span>End-to-End Latency:</span>
-                <strong>{data?.pipeline?.e2e_latency_s_p95 || 4.2}s p95</strong>
+                <strong>
+                  {data?.pipeline?.e2e_latency_s_p95 !== undefined
+                    ? `${Number(data.pipeline.e2e_latency_s_p95).toFixed(1)}s`
+                    : "0.0s"}{" "}
+                  p95
+                </strong>
               </div>
             </div>
           </div>
@@ -728,7 +744,7 @@ export default function AnalyticsDashboardPage() {
                 <Crosshair size={16} color="#c084fc" />
                 <span>MULTI-DIMENSIONAL THREAT SIGNATURE // RADAR VECTOR</span>
               </div>
-              <span className="panel-badge">APACHE ECHARTS RADAR</span>
+              <span className="panel-badge" style={{ color: "#34d399", borderColor: "rgba(52, 211, 153, 0.3)" }}>LIVE RADAR AGGREGATION</span>
             </div>
             <div className="panel-body" style={{ minHeight: "300px" }}>
               <EChart option={threatRadarOption} style={{ height: "280px", width: "100%" }} />

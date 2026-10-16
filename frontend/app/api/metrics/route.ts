@@ -44,10 +44,10 @@ export async function GET() {
       dark_vessels: parseInt(counts.dark_count || "0", 10),
       total_vessels: parseInt(counts.total_count || "0", 10),
       alerts_24h: parseInt(alertCount, 10),
-      msgs_consumed_per_s: metrics.msgs_consumed_per_s || 3420,
-      consumer_lag: metrics.consumer_lag || 120,
-      dlq_rate: metrics.dlq_rate || 0.008,
-      e2e_latency_s_p95: metrics.e2e_latency_s_p95 || 4.2,
+      msgs_consumed_per_s: metrics.msgs_consumed_per_s !== undefined && metrics.msgs_consumed_per_s !== null ? parseFloat(metrics.msgs_consumed_per_s) : 0,
+      consumer_lag: metrics.consumer_lag !== undefined && metrics.consumer_lag !== null ? parseInt(metrics.consumer_lag, 10) : 0,
+      dlq_rate: metrics.dlq_rate !== undefined && metrics.dlq_rate !== null ? parseFloat(metrics.dlq_rate) : 0,
+      e2e_latency_s_p95: metrics.e2e_latency_s_p95 !== undefined && metrics.e2e_latency_s_p95 !== null ? parseFloat(metrics.e2e_latency_s_p95) : 0,
     });
   } catch (err: any) {
     // Fallback demonstration telemetry

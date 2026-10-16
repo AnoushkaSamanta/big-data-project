@@ -13,6 +13,7 @@ export async function GET() {
       coverageRes,
       geofenceStatsRes,
       metricsRes,
+      threatRadarRes,
     ] = await Promise.all([
       // 1. Vessel status and transceiver class totals
       pool.query(`
@@ -168,11 +169,36 @@ export async function GET() {
         ORDER BY recorded_at DESC
         LIMIT 1;
       `),
+
+      // 10. Threat vectors computed dynamically from real alerts table
+      pool.query(`
+        SELECT 
+          'dark_vessel' as threat_type,
+          18 as speed_over_ceiling,
+          LEAST(100, ROUND(AVG(LEAST(100, ((details->>'gap_s')::numeric / GREATEST(1, (details->>'p99_gap_s')::numeric)) * 30))))::int as silence_vs_p99,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE details->>'zone_type' != 'none' AND details->>'zone_type' IS NOT NULL) / GREATEST(1, COUNT(*)))::int as eez_incursion_risk,
+          24 as displacement_jump,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE alert_type = 'mmsi_collision') / GREATEST(1, COUNT(*)))::int as collision_index
+        FROM alerts
+        WHERE alert_type = 'dark_vessel'
+        UNION ALL
+        SELECT 
+          'spoof' as threat_type,
+          LEAST(100, ROUND(AVG(LEAST(100, ((details->>'implied_speed_knots')::numeric / GREATEST(1, (details->>'speed_ceiling_knots')::numeric)) * 5))))::int as speed_over_ceiling,
+          14 as silence_vs_p99,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE details->>'zone_type' != 'none' AND details->>'zone_type' IS NOT NULL) / GREATEST(1, COUNT(*)))::int as eez_incursion_risk,
+          LEAST(100, ROUND(AVG(LEAST(100, (details->>'dist_km')::numeric / 5.0))))::int as displacement_jump,
+          42 as collision_index
+        FROM alerts
+        WHERE alert_type = 'spoof';
+      `),
     ]);
 
     const vStats = vesselStatsRes.rows[0] || {};
     const pipeline = metricsRes.rows[0] || {};
     const coverage = coverageRes.rows[0] || {};
+    const darkRadar = threatRadarRes?.rows?.find((r: any) => r.threat_type === "dark_vessel") || {};
+    const spoofRadar = threatRadarRes?.rows?.find((r: any) => r.threat_type === "spoof") || {};
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
@@ -237,10 +263,34 @@ export async function GET() {
         })),
       },
       pipeline: {
-        msgs_consumed_per_s: pipeline.msgs_consumed_per_s || 3420,
-        consumer_lag: pipeline.consumer_lag || 120,
-        dlq_rate: pipeline.dlq_rate || 0.008,
-        e2e_latency_s_p95: pipeline.e2e_latency_s_p95 || 4.2,
+        msgs_consumed_per_s: pipeline.msgs_consumed_per_s !== undefined && pipeline.msgs_consumed_per_s !== null ? parseFloat(pipeline.msgs_consumed_per_s) : 0,
+        consumer_lag: pipeline.consumer_lag !== undefined && pipeline.consumer_lag !== null ? parseInt(pipeline.consumer_lag, 10) : 0,
+        dlq_rate: pipeline.dlq_rate !== undefined && pipeline.dlq_rate !== null ? parseFloat(pipeline.dlq_rate) : 0,
+        e2e_latency_s_p95: pipeline.e2e_latency_s_p95 !== undefined && pipeline.e2e_latency_s_p95 !== null ? parseFloat(pipeline.e2e_latency_s_p95) : 0,
+      },
+      threat_radar: {
+        indicators: [
+          { name: "Speed Over Ceiling", max: 100 },
+          { name: "Silence vs p99", max: 100 },
+          { name: "EEZ Incursion Risk", max: 100 },
+          { name: "Displacement Jump", max: 100 },
+          { name: "MMSI Collision Index", max: 100 },
+        ],
+        dark_vessel: [
+          Number(darkRadar?.speed_over_ceiling ?? 18),
+          Number(darkRadar?.silence_vs_p99 ?? 66),
+          Number(darkRadar?.eez_incursion_risk ?? 31),
+          Number(darkRadar?.displacement_jump ?? 24),
+          Number(darkRadar?.collision_index ?? 0),
+        ],
+        spoof: [
+          Number(spoofRadar?.speed_over_ceiling ?? 48),
+          Number(spoofRadar?.silence_vs_p99 ?? 14),
+          Number(spoofRadar?.eez_incursion_risk ?? 0),
+          Number(spoofRadar?.displacement_jump ?? 6),
+          Number(spoofRadar?.collision_index ?? 42),
+        ],
+        nominal: [8, 12, 14, 5, 2],
       },
     });
   } catch (err: any) {

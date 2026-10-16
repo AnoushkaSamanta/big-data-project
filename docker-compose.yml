@@ -136,6 +136,24 @@ services:
         condition: service_healthy
     mem_limit: 500m
 
+  metrics:
+    image: darkvessel-detection-consumer
+    container_name: ais-metrics
+    restart: unless-stopped
+    profiles: ["stream"]
+    command: ["python3", "-m", "monitoring.metrics", "--interval", "10", "--db-url", "postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais", "--bootstrap-servers", "kafka:29092"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-ais_dev_password}@postgres:5432/ais
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    mem_limit: 300m
+
   spark-master:
     image: bitnami/spark:3.5.1
     container_name: ais-spark-master
