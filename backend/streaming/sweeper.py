@@ -34,14 +34,30 @@ def parse_args():
     parser.add_argument("--min-obs", type=int, default=500, help="Minimum coverage observations required to consider cell confident")
     parser.add_argument("--dedup-hours", type=int, default=6, help="Deduplication window in hours per vessel")
     parser.add_argument(
+        "--clock-source",
+        choices=["simulated", "system"],
+        default=os.getenv("CLOCK_SOURCE", "simulated"),
+        help="Clock source for time diffs: 'simulated' uses MAX(last_seen) for accelerated replay, 'system' uses now() for live streaming",
+    )
+    parser.add_argument(
         "--db-url",
         default=os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais"),
     )
     return parser.parse_args()
 
 
-SWEEP_SQL = """
-WITH candidate_gaps AS (
+def get_sweep_sql(clock_source: str = "simulated") -> str:
+    """Return parameterized dark vessel absence sweep SQL based on clock source."""
+    current_time_sql = (
+        "COALESCE((SELECT MAX(last_seen) FROM vessel_latest_state), now())"
+        if clock_source == "simulated"
+        else "now()"
+    )
+    return f"""
+WITH current_time_anchor AS (
+    SELECT {current_time_sql} AS current_ts
+),
+candidate_gaps AS (
     SELECT
         v.mmsi,
         v.last_seen,
@@ -50,26 +66,28 @@ WITH candidate_gaps AS (
         v.last_geom,
         v.transceiver_class,
         v.last_cell,
-        EXTRACT(EPOCH FROM (now() - v.last_seen)) AS observed_gap_s,
+        EXTRACT(EPOCH FROM (cta.current_ts - v.last_seen)) AS observed_gap_s,
         cp.p50_gap_s,
         cp.p95_gap_s,
         cp.p99_gap_s,
         cp.n_obs,
         COALESCE(g.name, 'Open Ocean') AS zone_name,
-        COALESCE(g.zone_type, 'none') AS zone_type
+        COALESCE(g.zone_type, 'none') AS zone_type,
+        cta.current_ts
     FROM vessel_latest_state v
+    CROSS JOIN current_time_anchor cta
     JOIN coverage_prior cp
       ON cp.cell = v.last_cell AND cp.transceiver_class = v.transceiver_class
     LEFT JOIN geofences g
       ON ST_Contains(g.geom, v.last_geom) AND g.zone_type IN ('mpa', 'eez')
     WHERE cp.n_obs >= %(min_obs)s
-      AND EXTRACT(EPOCH FROM (now() - v.last_seen)) > (cp.p99_gap_s * %(min_score)s)
+      AND EXTRACT(EPOCH FROM (cta.current_ts - v.last_seen)) > (cp.p99_gap_s * %(min_score)s)
       AND v.status != 'dark'
       AND NOT EXISTS (
           SELECT 1 FROM alerts a
           WHERE a.mmsi = v.mmsi
             AND a.alert_type = 'dark_vessel'
-            AND a.detected_at > now() - (%(dedup_hours)s || ' hours')::interval
+            AND a.detected_at > cta.current_ts - (%(dedup_hours)s || ' hours')::interval
       )
 )
 INSERT INTO alerts (mmsi, alert_type, score, severity, detected_at, last_lat, last_lon, details)
@@ -82,7 +100,7 @@ SELECT
         WHEN cg.observed_gap_s > (cg.p99_gap_s * 1.5) THEN 'medium'
         ELSE 'low'
     END AS severity,
-    now(),
+    cg.current_ts,
     cg.last_lat,
     cg.last_lon,
     jsonb_build_object(
@@ -100,14 +118,28 @@ ON CONFLICT (mmsi, alert_type, date_trunc('hour', detected_at AT TIME ZONE 'UTC'
 RETURNING mmsi, score, severity, details;
 """
 
+
+SWEEP_SQL = get_sweep_sql("simulated")
+
 UPDATE_STATUS_SQL = """
 UPDATE vessel_latest_state v
 SET status = 'dark'
 WHERE v.mmsi = ANY(%s);
 """
 
-SWEEP_RENDEZVOUS_SQL = """
-WITH candidate_rendezvous AS (
+
+def get_sweep_rendezvous_sql(clock_source: str = "simulated") -> str:
+    """Return parameterized ship-to-ship rendezvous sweep SQL based on clock source."""
+    current_time_sql = (
+        "COALESCE((SELECT MAX(last_seen) FROM vessel_latest_state), now())"
+        if clock_source == "simulated"
+        else "now()"
+    )
+    return f"""
+WITH current_time_anchor AS (
+    SELECT {current_time_sql} AS current_ts
+),
+candidate_rendezvous AS (
     SELECT
         v1.mmsi AS mmsi_1,
         v2.mmsi AS mmsi_2,
@@ -115,12 +147,14 @@ WITH candidate_rendezvous AS (
         v1.last_lat,
         v1.last_lon,
         COALESCE(v1.last_sog, 0.0) AS sog_1,
-        COALESCE(v2.last_sog, 0.0) AS sog_2
+        COALESCE(v2.last_sog, 0.0) AS sog_2,
+        cta.current_ts
     FROM vessel_latest_state v1
+    CROSS JOIN current_time_anchor cta
     JOIN vessel_latest_state v2
       ON v1.mmsi < v2.mmsi
-     AND v1.last_seen > now() - interval '45 minutes'
-     AND v2.last_seen > now() - interval '45 minutes'
+     AND v1.last_seen > cta.current_ts - interval '45 minutes'
+     AND v2.last_seen > cta.current_ts - interval '45 minutes'
      AND COALESCE(v1.last_sog, 0.0) <= 3.0
      AND COALESCE(v2.last_sog, 0.0) <= 3.0
      AND ST_DWithin(v1.last_geom::geography, v2.last_geom::geography, 500)
@@ -133,7 +167,7 @@ WITH candidate_rendezvous AS (
         SELECT 1 FROM alerts a
         WHERE a.mmsi = v1.mmsi
           AND a.alert_type = 'rendezvous_sts'
-          AND a.detected_at > now() - (%(dedup_hours)s || ' hours')::interval
+          AND a.detected_at > cta.current_ts - (%(dedup_hours)s || ' hours')::interval
     )
 )
 INSERT INTO alerts (mmsi, alert_type, score, severity, detected_at, last_lat, last_lon, details)
@@ -142,7 +176,7 @@ SELECT
     'rendezvous_sts',
     ROUND((500.0 / GREATEST(cr.distance_m, 10.0))::numeric, 2) AS score,
     'high' AS severity,
-    now(),
+    cr.current_ts,
     cr.last_lat,
     cr.last_lon,
     jsonb_build_object(
@@ -158,6 +192,9 @@ RETURNING mmsi, score, severity, details;
 """
 
 
+SWEEP_RENDEZVOUS_SQL = get_sweep_rendezvous_sql("simulated")
+
+
 def perform_sweep(cursor, conn, args) -> int:
     """Execute absence detection and STS rendezvous sweeps and return count of new alerts."""
     params = {
@@ -165,9 +202,12 @@ def perform_sweep(cursor, conn, args) -> int:
         "min_score": args.min_score,
         "dedup_hours": args.dedup_hours,
     }
+    clock_source = getattr(args, "clock_source", "simulated")
+    sweep_sql = get_sweep_sql(clock_source)
+    sweep_rendezvous_sql = get_sweep_rendezvous_sql(clock_source)
 
     # 1. Dark Vessel Absence Sweep
-    cursor.execute(SWEEP_SQL, params)
+    cursor.execute(sweep_sql, params)
     new_alerts = cursor.fetchall()
     total_new = 0
 
@@ -187,7 +227,7 @@ def perform_sweep(cursor, conn, args) -> int:
 
     # 2. Ship-to-Ship (STS) Rendezvous Sweep
     try:
-        cursor.execute(SWEEP_RENDEZVOUS_SQL, {"dedup_hours": args.dedup_hours})
+        cursor.execute(sweep_rendezvous_sql, {"dedup_hours": args.dedup_hours})
         rendezvous_alerts = cursor.fetchall()
         if rendezvous_alerts:
             conn.commit()

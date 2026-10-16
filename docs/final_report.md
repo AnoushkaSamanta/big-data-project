@@ -1,7 +1,7 @@
 # Real-Time Dark Vessel Detection System: Final Technical Report
 
 **Authors**: Advanced Big Data Engineering Team  
-**System Version**: 2.0 (KRaft, PostGIS 3.4, Deck.gl, Isolation Forest)  
+**System Version**: 2.0 (KRaft, PostGIS 3.4, Deck.gl, Spark MLlib & Isolation Forest)  
 **Date**: September 2026  
 
 ---
@@ -16,7 +16,7 @@ This report presents the implementation and quantitative evaluation of the **Rea
 1. **Coverage-Prior Baseline**: Spatial H3 cell gap percentiles ($p_{50}, p_{95}, p_{99}$) normalized against historical receiver observation density.
 2. **Absence-Triggered Sweeper**: A periodic timer scanning hot vessel state rather than waiting for non-existent arrivals.
 3. **Hot/Cold Storage Partitioning**: Sub-millisecond dashboard queries over `vessel_latest_state` while archiving multi-million-row partitioned history in `vessel_positions`.
-4. **Multi-Model Anomaly Engine**: Combined rule-based jump-and-return spoofing, loitering detection inside Marine Protected Areas (MPAs), and unsupervised Isolation Forest trajectory scoring.
+4. **Multi-Model Anomaly Engine**: Combined rule-based jump-and-return spoofing, loitering detection inside Marine Protected Areas (MPAs), and distributed Spark MLlib & Isolation Forest trajectory scoring.
 
 ---
 

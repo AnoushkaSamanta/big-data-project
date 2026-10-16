@@ -52,6 +52,11 @@ def parse_args():
     )
     parser.set_defaults(use_spark=True)
     parser.add_argument(
+        "--demo-mode",
+        action="store_true",
+        help="Enable demonstration mode for sparse test datasets (enriches surrounding cells and scales n_obs)",
+    )
+    parser.add_argument(
         "--db-url",
         default=os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais"),
     )
@@ -126,23 +131,25 @@ def build_coverage_prior_spark(args):
 
     results = prior.collect()
     records = []
+    is_demo = getattr(args, "demo_mode", False)
+
     for row in results:
         n_obs = int(row["n_obs"])
-        demo_n_obs = n_obs * 500 if total_gaps <= 10000 else n_obs
+        final_n_obs = (n_obs * 500) if (is_demo and total_gaps <= 10000) else n_obs
         records.append(
             (
                 row["cell"],
                 row["TransceiverClass"],
-                demo_n_obs,
+                final_n_obs,
                 float(row["p50_gap_s"] or 120.0),
                 float(row["p95_gap_s"] or 600.0),
                 float(row["p99_gap_s"] or 1800.0),
             )
         )
 
-    # Enrich with surrounding California surveillance corridor cells for demo/sparse runs
-    if total_gaps <= 10000:
-        logger.info("Enriching PySpark coverage prior with surrounding California surveillance corridor cells...")
+    # Enrich with surrounding California surveillance corridor cells only in demo mode
+    if is_demo and total_gaps <= 10000:
+        logger.warning("⚠️ DEMO MODE: Enriching coverage prior with surrounding California corridor cells and boosted n_obs...")
         sf_lat, sf_lon = 37.8, -122.42
         center_cell = lat_lon_to_h3(sf_lat, sf_lon, args.h3_res)
         try:
@@ -226,13 +233,13 @@ def build_coverage_prior_pandas(args):
         p50 = float(np.percentile(gaps, 50))
         p95 = float(np.percentile(gaps, 95))
         p99 = float(np.percentile(gaps, 99))
-        # For demo with small sample, scale n_obs to historical confidence level (>= 1500)
-        demo_n_obs = int(n_obs * 500) if len(df) <= 10000 else int(n_obs)
-        records.append((cell, str(t_class), demo_n_obs, p50, p95, p99))
+        is_demo = getattr(args, "demo_mode", False)
+        final_n_obs = int(n_obs * 500) if (is_demo and len(df) <= 10000) else int(n_obs)
+        records.append((cell, str(t_class), final_n_obs, p50, p95, p99))
 
-    # Also seed the surrounding surveillance corridor cells
-    if len(df) <= 10000:
-        logger.info("Enriching coverage prior with surrounding California surveillance corridor cells...")
+    # Also seed surrounding surveillance corridor cells only in demo mode
+    if getattr(args, "demo_mode", False) and len(df) <= 10000:
+        logger.warning("⚠️ DEMO MODE: Enriching coverage prior with surrounding California corridor cells and boosted n_obs...")
         sf_lat, sf_lon = 37.8, -122.42
         center_cell = lat_lon_to_h3(sf_lat, sf_lon, args.h3_res)
         try:

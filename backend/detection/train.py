@@ -1,10 +1,12 @@
 """
-Machine Learning Training Pipeline: Vessel Trajectory Isolation Forest.
+Machine Learning Training Pipeline: Distributed Spark MLlib Clustering & IsolationForest.
 
-Trains an unsupervised Isolation Forest model on historical trajectory feature vectors.
-Uses RobustScaler to handle heavy-tailed maritime movement distributions.
-Serializes the full pipeline together with feature names and version metadata
-to eliminate train/serve skew.
+Trains an unsupervised trajectory anomaly detection model on historical vessel movement vectors:
+1. Distributed Engine: Spark MLlib Pipeline (VectorAssembler + StandardScaler + KMeans) for scale
+2. Single-Node Engine: Scikit-learn Pipeline (RobustScaler + IsolationForest)
+
+Serializes the fitted pipeline together with feature names and version metadata
+to eliminate train/serve skew during streaming inference.
 """
 
 import argparse
@@ -35,6 +37,11 @@ def parse_args(args=None):
     parser.add_argument("--contamination", type=float, default=0.01, help="Expected outlier contamination rate")
     parser.add_argument("--n-estimators", type=int, default=200, help="Number of trees in IsolationForest fallback")
     parser.add_argument("--seed", type=int, default=42, help="Random state seed")
+    parser.add_argument(
+        "--allow-synthetic",
+        action="store_true",
+        help="Allow generating synthetic fallback features if input data has insufficient observations",
+    )
     return parser.parse_args(args)
 
 
@@ -73,8 +80,8 @@ def extract_window_features_from_df(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(feature_rows)
 
 
-def get_training_features(in_path: Path, seed: int) -> pd.DataFrame:
-    """Load or synthesize training feature matrix."""
+def get_training_features(in_path: Path, seed: int, allow_synthetic: bool = False) -> pd.DataFrame:
+    """Load training feature matrix, raising an error if insufficient data unless --allow-synthetic is set."""
     if in_path.exists():
         logger.info(f"Loading training data from {in_path}...")
         if in_path.suffix == ".parquet":
@@ -86,8 +93,16 @@ def get_training_features(in_path: Path, seed: int) -> pd.DataFrame:
         feat_df = pd.DataFrame()
 
     if feat_df.empty or len(feat_df) < 5:
+        if not allow_synthetic:
+            raise ValueError(
+                f"Insufficient windowed observations in input file '{in_path}' "
+                f"({len(feat_df)} valid trajectories extracted, minimum 5 required). "
+                "Provide a valid AIS dataset or pass --allow-synthetic for demonstration mode."
+            )
+
         logger.warning(
-            "Insufficient windowed observations in input file. Generating synthetic baseline feature set for training."
+            "⚠️ DEMO MODE: --allow-synthetic enabled. Generating 500 synthetic baseline feature vectors "
+            "because input file is insufficient or missing."
         )
         np.random.seed(seed)
         n_synth = 500
@@ -225,7 +240,8 @@ def train_model(args):
     out_path = Path(args.out_model)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    X = get_training_features(in_path, args.seed)
+    allow_synth = getattr(args, "allow_synthetic", False)
+    X = get_training_features(in_path, args.seed, allow_synthetic=allow_synth)
 
     if getattr(args, "engine", "mllib") == "mllib":
         model_bundle = train_mllib_pipeline(X, args)

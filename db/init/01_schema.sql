@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS vessel_positions (
     PRIMARY KEY (mmsi, ts)
 ) PARTITION BY RANGE (ts);
 
--- Partitions for Q1 2024 (and default fallback)
+-- Partitions for historical replay (2024)
 CREATE TABLE IF NOT EXISTS vessel_positions_2024_01 PARTITION OF vessel_positions
     FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
 
@@ -25,6 +25,25 @@ CREATE TABLE IF NOT EXISTS vessel_positions_2024_02 PARTITION OF vessel_position
 
 CREATE TABLE IF NOT EXISTS vessel_positions_2024_03 PARTITION OF vessel_positions
     FOR VALUES FROM ('2024-03-01') TO ('2024-04-01');
+
+CREATE TABLE IF NOT EXISTS vessel_positions_2024_rest PARTITION OF vessel_positions
+    FOR VALUES FROM ('2024-04-01') TO ('2025-01-01');
+
+CREATE TABLE IF NOT EXISTS vessel_positions_2025 PARTITION OF vessel_positions
+    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+
+-- Partitions for live operational streaming (2026)
+CREATE TABLE IF NOT EXISTS vessel_positions_2026_q1 PARTITION OF vessel_positions
+    FOR VALUES FROM ('2026-01-01') TO ('2026-04-01');
+
+CREATE TABLE IF NOT EXISTS vessel_positions_2026_q2 PARTITION OF vessel_positions
+    FOR VALUES FROM ('2026-04-01') TO ('2026-07-01');
+
+CREATE TABLE IF NOT EXISTS vessel_positions_2026_q3 PARTITION OF vessel_positions
+    FOR VALUES FROM ('2026-07-01') TO ('2026-10-01');
+
+CREATE TABLE IF NOT EXISTS vessel_positions_2026_q4 PARTITION OF vessel_positions
+    FOR VALUES FROM ('2026-10-01') TO ('2027-01-01');
 
 CREATE TABLE IF NOT EXISTS vessel_positions_default PARTITION OF vessel_positions DEFAULT;
 

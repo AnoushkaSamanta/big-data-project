@@ -46,7 +46,7 @@ def load_model_bundle(model_path: str):
         from detection.train import parse_args as train_parse_args
         from detection.train import train_model
 
-        train_model(train_parse_args([]))
+        train_model(train_parse_args(["--allow-synthetic"]))
 
     bundle = joblib.load(model_path)
     assert bundle["feature_names"] == FEATURE_NAMES, "Feature name mismatch in loaded model!"

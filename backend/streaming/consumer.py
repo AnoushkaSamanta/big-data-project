@@ -22,6 +22,7 @@ from typing import Any
 import psycopg2
 from confluent_kafka import Consumer, KafkaError, Producer
 from psycopg2.extras import execute_values
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from data_pipeline.validate import normalize_sentinels, validate_record
 from streaming.processor import Alert, VesselState, process_batch
@@ -47,6 +48,12 @@ def parse_args():
     return parser.parse_args()
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=0.5, min=0.5, max=5.0),
+    retry=retry_if_exception_type((psycopg2.OperationalError, psycopg2.InterfaceError)),
+    reraise=True,
+)
 def flush_batch_to_postgres(
     cursor,
     conn,
@@ -235,7 +242,13 @@ def run_consumer(args):
                     raw_record = json.loads(raw_bytes.decode("utf-8"))
                 except Exception as e:
                     logger.warning(f"Failed to decode message JSON: {e}")
-                    consumer.commit(msg)
+                    producer.produce(
+                        args.dlq_topic,
+                        key=b"corrupt",
+                        value=raw_bytes,
+                    )
+                    producer.poll(0)
+                    batch_messages.append(msg)
                     continue
 
                 # 3. Validation Contract
@@ -254,7 +267,7 @@ def run_consumer(args):
                         value=json.dumps(dlq_payload).encode("utf-8"),
                     )
                     producer.poll(0)
-                    consumer.commit(msg)
+                    batch_messages.append(msg)
                     continue
 
                 # Clean sentinels and queue for batch processing
@@ -266,12 +279,17 @@ def run_consumer(args):
             curr_time = time.time()
             time_since_flush = (curr_time - last_flush_time) * 1000
 
-            if len(batch_records) >= args.batch_size or (batch_records and time_since_flush >= args.flush_interval_ms):
+            if len(batch_records) >= args.batch_size or (batch_messages and time_since_flush >= args.flush_interval_ms):
                 # 4. Process batch through pure processor core
-                processed_records, alerts = process_batch(batch_records, state_table)
+                if batch_records:
+                    processed_records, alerts = process_batch(batch_records, state_table)
+                    # 5. Atomic Batch Write to Database
+                    flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
+                else:
+                    processed_records, alerts = [], []
 
-                # 5. Atomic Batch Write to Database
-                flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
+                # Ensure all buffered DLQ messages are delivered before committing Kafka offsets
+                producer.flush(timeout=5.0)
 
                 # 6. Commit Kafka offsets across all assigned partitions
                 if batch_messages:
@@ -293,9 +311,11 @@ def run_consumer(args):
         logger.info("Stopping consumer...")
     finally:
         # Final flush if anything is pending
-        if batch_records:
-            processed_records, alerts = process_batch(batch_records, state_table)
-            flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
+        if batch_records or batch_messages:
+            if batch_records:
+                processed_records, alerts = process_batch(batch_records, state_table)
+                flush_batch_to_postgres(cursor, conn, processed_records, state_table, alerts)
+            producer.flush(timeout=5.0)
             if batch_messages:
                 consumer.commit(asynchronous=False)
         consumer.close()
