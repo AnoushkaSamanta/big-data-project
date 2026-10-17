@@ -62,3 +62,13 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk

@@ -75,7 +75,7 @@ evaluate:        ## Run Precision/Recall & ablation evaluation against ground tr
 	uv run --no-sync --project backend python3 -m evaluation.evaluate
 
 test:            ## Run pytest test suite for backend
-	uv run --no-sync --project backend pytest backend/tests/ -v
+	env -u SPARK_HOME uv run --no-sync --project backend pytest backend/tests/ -v
 
 lint:            ## Lint Python codebase with ruff
 	uv run --no-sync --project backend ruff check backend/
