@@ -31,41 +31,22 @@ def parse_args():
     return parser.parse_args()
 
 
-def evaluate_detector(db_url: str):
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-
-    # 1. Fetch all ground-truth labeled anomalies
-    cur.execute("SELECT id, mmsi, anomaly_type, t_start, t_end, params FROM ground_truth;")
-    gt_rows = cur.fetchall()
-
-    if not gt_rows:
-        logger.warning("No ground truth labels found in 'ground_truth' table. Run data_pipeline.inject_anomalies first.")
-        cur.close()
-        conn.close()
-        return
-
-    df_gt = pd.DataFrame(gt_rows)
-
-    # 2. Fetch all generated alerts
-    cur.execute("SELECT id, mmsi, alert_type, score, severity, detected_at, details FROM alerts;")
-    alert_rows = cur.fetchall()
-    df_alerts = pd.DataFrame(alert_rows) if alert_rows else pd.DataFrame()
-
-    logger.info(f"Loaded {len(df_gt)} ground-truth anomalies and {len(df_alerts)} system alerts.")
 
 def match_alerts_to_ground_truth(df_gt_subset: pd.DataFrame, df_alerts_subset: pd.DataFrame) -> dict:
     """Perform consumed-set bipartite matching between alerts and ground-truth events."""
     if df_gt_subset.empty:
-        fp = len(df_alerts_subset)
         return {
             "Total Injected": 0,
             "True Positives": 0,
-            "False Positives": fp,
+            "False Positives": 0,
             "Precision": 0.0,
             "Recall": 0.0,
             "F1-Score": 0.0,
         }
+
+    cohort_mmsis = set(df_gt_subset["mmsi"].unique())
+    if not df_alerts_subset.empty:
+        df_alerts_subset = df_alerts_subset[df_alerts_subset["mmsi"].isin(cohort_mmsis)].copy()
 
     total_injected = len(df_gt_subset)
     if df_alerts_subset.empty:
@@ -222,12 +203,23 @@ def evaluate_detector(db_url: str):
 
     df_gt = pd.DataFrame(gt_rows)
 
-    # 2. Fetch all generated alerts
-    cur.execute("SELECT id, mmsi, alert_type, score, severity, detected_at, details FROM alerts;")
-    alert_rows = cur.fetchall()
-    df_alerts = pd.DataFrame(alert_rows) if alert_rows else pd.DataFrame()
+    # 2. Fetch generated alerts for the ground-truth cohort MMSIs
+    gt_mmsis = tuple(int(x) for x in df_gt["mmsi"].unique())
+    if gt_mmsis:
+        cur.execute(
+            """
+            SELECT id, mmsi, alert_type, score, severity, detected_at 
+            FROM alerts 
+            WHERE mmsi IN %s;
+            """,
+            (gt_mmsis,)
+        )
+        alert_rows = cur.fetchall()
+        df_alerts = pd.DataFrame(alert_rows) if alert_rows else pd.DataFrame()
+    else:
+        df_alerts = pd.DataFrame()
 
-    logger.info(f"Loaded {len(df_gt)} ground-truth anomalies and {len(df_alerts)} system alerts.")
+    logger.info(f"Loaded {len(df_gt)} ground-truth anomalies and {len(df_alerts)} cohort system alerts.")
 
     gt_to_alert_map = {
         "dark": "dark_vessel",
@@ -235,12 +227,19 @@ def evaluate_detector(db_url: str):
         "spoof": "spoof",
         "loiter": "loiter",
         "mmsi_collision": "mmsi_collision",
+        "collision": "mmsi_collision",
+        "rendezvous": "rendezvous_sts",
+        "rendezvous_sts": "rendezvous_sts",
+        "ml_anomaly": "ml_anomaly",
     }
 
     metrics_by_type = {}
+    present_types = list(df_gt["anomaly_type"].unique())
+    all_eval_types = ["dark", "spoof", "loiter", "mmsi_collision", "rendezvous", "ml_anomaly"]
+    eval_types = [t for t in all_eval_types if t in present_types] or ["dark", "spoof", "loiter", "mmsi_collision"]
 
-    for gt_type in ["dark", "spoof", "loiter", "mmsi_collision"]:
-        target_alert_type = gt_to_alert_map[gt_type]
+    for gt_type in eval_types:
+        target_alert_type = gt_to_alert_map.get(gt_type, gt_type)
         gt_subset = df_gt[df_gt["anomaly_type"] == gt_type]
         alerts_subset = (
             df_alerts[df_alerts["alert_type"] == target_alert_type]

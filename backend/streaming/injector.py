@@ -365,6 +365,31 @@ def inject_scenario(
     producer = create_producer(bootstrap_servers)
     publish_pings(producer, topic, pings)
 
+    # Persist ground-truth labels for benchmark evaluation
+    try:
+        import psycopg2
+        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais")
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        timestamps = [p.get("BaseDateTime") for p in pings if p.get("BaseDateTime")]
+        t_start = min(timestamps) if timestamps else datetime.now(timezone.utc).isoformat()
+        t_end = max(timestamps) if timestamps else datetime.now(timezone.utc).isoformat()
+        gt_type = "dark" if scenario_name == "dark" else ("mmsi_collision" if scenario_name == "collision" else scenario_name)
+        for mmsi in {p["MMSI"] for p in pings}:
+            cur.execute(
+                """
+                INSERT INTO ground_truth (mmsi, anomaly_type, t_start, t_end, params)
+                VALUES (%s, %s, %s, %s, %s);
+                """,
+                (mmsi, gt_type, t_start, t_end, json.dumps({"scenario": scenario_name, "desc": desc}))
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info(f"✓ Recorded ground truth label for scenario '{scenario_name}' in 'ground_truth' table.")
+    except Exception as e:
+        logger.debug(f"Ground truth logging notice: {e}")
+
     return {
         "status": "success",
         "scenario": scenario_name,

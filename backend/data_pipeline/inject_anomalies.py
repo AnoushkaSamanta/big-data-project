@@ -28,7 +28,10 @@ def parse_args():
     parser.add_argument("--n-events", type=int, default=200, help="Number of anomaly events to inject")
     parser.add_argument("--in-dir", default="data/parquet")
     parser.add_argument("--out-dir", default="data/synthetic")
-    parser.add_argument("--db-url", default=os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ais"))
+    parser.add_argument(
+        "--db-url",
+        default=os.getenv("DATABASE_URL", "postgresql://postgres:ais_dev_password@localhost:5432/ais"),
+    )
     return parser.parse_args()
 
 
@@ -41,11 +44,20 @@ def generate_synthetic_anomalies(seed: int, n_events: int, in_dir: str, out_dir:
     out_path.mkdir(parents=True, exist_ok=True)
     
     parquet_files = list(in_path.rglob("*.parquet"))
-    if not parquet_files:
-        logger.warning(f"No Parquet files found in {in_dir}")
-        return
+    if parquet_files:
+        logger.info(f"Loading base AIS positions from {parquet_files[0]}...")
+        df = pd.read_parquet(parquet_files[0])
+    else:
+        # Fallback to demo CSV in data/raw
+        csv_candidates = list(Path("data/raw").glob("*.csv"))
+        if csv_candidates:
+            csv_file = Path("data/raw/demo_scenarios.csv") if Path("data/raw/demo_scenarios.csv").exists() else csv_candidates[0]
+            logger.info(f"No Parquet found; loading base AIS positions from {csv_file}...")
+            df = pd.read_csv(csv_file)
+        else:
+            logger.warning(f"No Parquet or CSV files found in {in_dir} or data/raw")
+            return
         
-    df = pd.read_parquet(parquet_files[0]) # For MVP, just read one file or a subset
     df["ts"] = pd.to_datetime(df["BaseDateTime"])
     df = df.sort_values(by=["MMSI", "ts"]).reset_index(drop=True)
     
@@ -60,10 +72,10 @@ def generate_synthetic_anomalies(seed: int, n_events: int, in_dir: str, out_dir:
         mmsi_mask = df["MMSI"] == mmsi
         mmsi_df = df[mmsi_mask]
         
-        if len(mmsi_df) < 10:
+        if len(mmsi_df) < 5:
             continue
             
-        start_idx = random.randint(0, len(mmsi_df) - 5)
+        start_idx = random.randint(0, len(mmsi_df) - 4)
         end_idx = random.randint(start_idx + 2, len(mmsi_df) - 1)
         
         t_start = mmsi_df.iloc[start_idx]["ts"]
