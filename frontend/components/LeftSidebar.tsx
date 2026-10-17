@@ -73,6 +73,26 @@ export default function LeftSidebar({
   const [activeTab, setActiveTab] = useState<"fleet" | "alerts">("fleet");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [alertSearchQuery, setAlertSearchQuery] = useState("");
+  const [alertTypeFilter, setAlertTypeFilter] = useState("all");
+
+  // Filter alerts for the alerts pane
+  const filteredAlerts = React.useMemo(() => {
+    let result = alerts;
+    if (alertTypeFilter !== "all") {
+      result = result.filter((a) => a.alert_type === alertTypeFilter);
+    }
+    if (alertSearchQuery.trim()) {
+      const q = alertSearchQuery.toLowerCase().trim();
+      result = result.filter(
+        (a) =>
+          String(a.mmsi).includes(q) ||
+          (a.vessel_name && a.vessel_name.toLowerCase().includes(q)) ||
+          a.alert_type.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [alerts, alertTypeFilter, alertSearchQuery]);
 
   // Filter vessels for the fleet list
   const filteredVessels = React.useMemo(() => {
@@ -418,7 +438,7 @@ export default function LeftSidebar({
                   <div className="mt-pane-header">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-slate-900 text-sm">Anomaly Alerts Feed</h3>
-                      <span className="mt-count-pill red">{alerts.length} live</span>
+                      <span className="mt-count-pill red">{filteredAlerts.length} live</span>
                     </div>
                     <button
                       type="button"
@@ -431,21 +451,124 @@ export default function LeftSidebar({
                     </button>
                   </div>
 
+                  {/* 1-Click Interactive Demo Scenario Injectors */}
+                  <div className="p-2 mb-2 bg-slate-900 rounded-md border border-amber-500/30">
+                    <div className="flex items-center justify-between text-2xs font-bold text-amber-400 mb-1.5 uppercase tracking-wider">
+                      <span className="flex items-center gap-1">
+                        <Zap size={11} className="text-amber-400" /> Demo Injections (1-Click)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onInjectScenario?.("spoof")}
+                        className="text-left px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 rounded text-2xs text-amber-200 transition-colors"
+                        title="Inject Jump-and-Return GPS Spoofing"
+                      >
+                        <span className="font-bold block text-white">⚡ GPS Spoof</span>
+                        <span className="text-3xs text-amber-300 font-mono">GHOST (369888777)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onInjectScenario?.("dark")}
+                        className="text-left px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/40 rounded text-2xs text-red-200 transition-colors"
+                        title="Inject Dark Vessel Transponder Blackout"
+                      >
+                        <span className="font-bold block text-white">⚡ Dark Vessel</span>
+                        <span className="text-3xs text-red-300 font-mono">SHADOW (367999888)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onInjectScenario?.("loiter")}
+                        className="text-left px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/40 rounded text-2xs text-yellow-200 transition-colors"
+                        title="Inject Marine Protected Area Loitering"
+                      >
+                        <span className="font-bold block text-white">⚡ MPA Loiter</span>
+                        <span className="text-3xs text-yellow-300 font-mono">HARVEST (366234890)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onInjectScenario?.("collision")}
+                        className="text-left px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/40 rounded text-2xs text-cyan-200 transition-colors"
+                        title="Inject Identity Collision Cloned Transponder"
+                      >
+                        <span className="font-bold block text-white">⚡ Collision</span>
+                        <span className="text-3xs text-cyan-300 font-mono">TWIN (368111222)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search inside alerts */}
+                  <div className="mt-search-box mb-2">
+                    <Search size={14} className="text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter by MMSI, name, or type..."
+                      value={alertSearchQuery}
+                      onChange={(e) => setAlertSearchQuery(e.target.value)}
+                    />
+                    {alertSearchQuery && (
+                      <button type="button" onClick={() => setAlertSearchQuery("")} className="text-slate-400 hover:text-slate-600">
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Alert Category Filter Pills */}
+                  <div className="mt-filter-pills mb-2">
+                    {[
+                      { id: "all", label: "All" },
+                      { id: "spoof", label: "Spoof" },
+                      { id: "dark_vessel", label: "Dark" },
+                      { id: "loiter", label: "Loiter" },
+                      { id: "mmsi_collision", label: "Collision" },
+                      { id: "rendezvous_sts", label: "STS" },
+                      { id: "ml_anomaly", label: "ML" },
+                    ].map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`mt-pill ${alertTypeFilter === c.id ? "active" : ""}`}
+                        onClick={() => setAlertTypeFilter(c.id)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="mt-alerts-list">
-                    {alerts.length === 0 ? (
+                    {filteredAlerts.length === 0 ? (
                       <div className="text-center py-8 text-xs text-slate-400">
-                        No active tactical anomalies detected.
+                        No tactical anomalies found matching filter.
                       </div>
                     ) : (
-                      alerts.map((a) => {
+                      filteredAlerts.map((a) => {
                         const country = getVesselCountry(a.mmsi);
                         return (
                           <div
                             key={a.id}
-                            className={`mt-alert-feed-card ${a.severity}`}
+                            className={`mt-alert-feed-card ${a.severity} cursor-pointer hover:border-orange-500`}
                             onClick={() => {
                               const found = vessels.find((v) => v.mmsi === a.mmsi);
-                              if (found) onSelectVessel(found);
+                              if (found) {
+                                onSelectVessel(found);
+                              } else {
+                                onSelectVessel({
+                                  mmsi: a.mmsi,
+                                  last_seen: a.detected_at,
+                                  lat: a.last_lat ?? 37.82,
+                                  lon: a.last_lon ?? -122.42,
+                                  sog: a.details?.implied_speed_knots ?? 0.0,
+                                  cog: 0.0,
+                                  heading: 0.0,
+                                  vessel_type: 70,
+                                  transceiver_class: a.details?.transceiver_class ?? "A",
+                                  cell: a.details?.cell ?? null,
+                                  msg_count: 1,
+                                  status: a.alert_type === "dark_vessel" ? "dark" : "active",
+                                  vessel_name: a.vessel_name || `VESSEL ${a.mmsi}`,
+                                });
+                              }
                             }}
                           >
                             <div className="flex justify-between items-start mb-1">
@@ -457,7 +580,9 @@ export default function LeftSidebar({
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
                                 <span>{country.flag}</span>
-                                <span className="font-bold text-xs text-slate-900 font-mono">MMSI {a.mmsi}</span>
+                                <span className="font-bold text-xs text-slate-900 font-mono">
+                                  {a.vessel_name ? `${a.vessel_name} (${a.mmsi})` : `MMSI ${a.mmsi}`}
+                                </span>
                               </div>
                               <span className="text-2xs font-semibold text-red-600 font-mono">Score {a.score}</span>
                             </div>
